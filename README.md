@@ -4,6 +4,11 @@
 
 The app is built around the Egyptian BTC 10g 24K ingot listing configured in `gold_tracker/config.py`, the `GoldPrice.Today` live API, and Yahoo Finance historical data for `GC=F`.
 
+<img width="1252" height="1065" alt="Screenshot 2026-07-05 125550" src="https://github.com/user-attachments/assets/bc73086e-80ea-4211-a41e-283c97d64d53" />
+<img width="1127" height="990" alt="Screenshot 2026-07-05 125746" src="https://github.com/user-attachments/assets/7c4361cb-1db9-4efb-b25c-16b772bda0df" />
+<img width="1302" height="940" alt="Screenshot 2026-07-05 160605" src="https://github.com/user-attachments/assets/e7542896-9a10-4f37-a50a-9323ce7882b6" />
+
+
 ## What It Does
 
 - Shows Egypt market and worldwide EGP-per-gram prices on the dashboard.
