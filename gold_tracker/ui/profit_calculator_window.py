@@ -40,7 +40,9 @@ class ProfitCalculatorWindow:
         self.current_price_var = tk.StringVar(value=self._format_current_price())
         self.cost_basis_var = tk.StringVar(value="0.00 EGP")
         self.current_value_var = tk.StringVar(value="0.00 EGP")
+        self.break_even_var = tk.StringVar(value="Break-even price: 0.00 EGP/g")
         self.profit_var = tk.StringVar(value="0.00 EGP")
+        self.profit_percent_var = tk.StringVar(value="Profit/loss: 0.00%")
 
         self.window = tk.Toplevel(parent)
         self.window.title(PROFIT_WINDOW_TITLE)
@@ -150,7 +152,7 @@ class ProfitCalculatorWindow:
         table.grid_columnconfigure(1, weight=1)
         table.grid_columnconfigure(2, weight=1)
         table.grid_columnconfigure(3, weight=0)
-        table.grid_rowconfigure(2, weight=1)
+        table.grid_rowconfigure(3, weight=1)
 
         self._build_table_header(table)
         self._build_table_rows(table)
@@ -200,6 +202,13 @@ class ProfitCalculatorWindow:
             fg=COLORS["text_secondary"],
             bg=COLORS["bg_secondary"],
         ).pack(anchor="w", pady=(4, 0))
+        tk.Label(
+            profit_panel,
+            textvariable=self.break_even_var,
+            font=self.small_font,
+            fg=COLORS["text_secondary"],
+            bg=COLORS["bg_secondary"],
+        ).pack(anchor="w", pady=(4, 0))
         self.profit_label = tk.Label(
             profit_panel,
             textvariable=self.profit_var,
@@ -208,6 +217,14 @@ class ProfitCalculatorWindow:
             bg=COLORS["bg_secondary"],
         )
         self.profit_label.pack(anchor="w", pady=(6, 0))
+        self.profit_percent_label = tk.Label(
+            profit_panel,
+            textvariable=self.profit_percent_var,
+            font=self.badge_font,
+            fg=COLORS["text_soft"],
+            bg=COLORS["bg_secondary"],
+        )
+        self.profit_percent_label.pack(anchor="w", pady=(2, 0))
 
     def _build_table_header(self, table: tk.Frame) -> None:
         """Build the table column labels."""
@@ -228,8 +245,42 @@ class ProfitCalculatorWindow:
             "%P",
         )
 
+        actions = tk.Frame(table, bg=COLORS["bg_secondary"])
+        actions.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 12))
+        add_button = self._create_small_button(
+            actions,
+            text="+ Add purchase",
+            command=self._add_purchase_row,
+            variant="primary",
+        )
+        add_button.pack(side=tk.LEFT)
+
+        file_actions = tk.Frame(actions, bg=COLORS["bg_secondary"])
+        file_actions.pack(side=tk.RIGHT)
+        export_button = self._create_file_action_button(
+            file_actions,
+            text="Export xlsx",
+            icon="⇧",
+            command=self._export_to_excel,
+        )
+        export_button.pack(side=tk.LEFT, padx=(0, 8))
+        import_button = self._create_file_action_button(
+            file_actions,
+            text="Import xlsx",
+            icon="⇩",
+            command=self._import_from_excel,
+        )
+        import_button.pack(side=tk.LEFT)
+        self._bind_table_mousewheel(actions)
+        self._bind_table_mousewheel(add_button)
+        self._bind_table_mousewheel(file_actions)
+        self._bind_table_mousewheel(export_button)
+        self._bind_table_mousewheel(import_button)
+
+        self._build_fixed_table_header(table)
+
         canvas_shell = tk.Frame(table, bg=COLORS["bg_secondary"])
-        canvas_shell.grid(row=1, column=0, columnspan=4, sticky="nsew")
+        canvas_shell.grid(row=3, column=0, columnspan=4, sticky="nsew")
         canvas_shell.grid_columnconfigure(0, weight=1)
         canvas_shell.grid_rowconfigure(0, weight=1)
 
@@ -237,7 +288,7 @@ class ProfitCalculatorWindow:
             canvas_shell,
             bg=COLORS["bg_secondary"],
             highlightthickness=0,
-            height=170,
+            height=220,
         )
         scrollbar = tk.Scrollbar(
             canvas_shell,
@@ -271,42 +322,9 @@ class ProfitCalculatorWindow:
         self._bind_table_mousewheel(self.rows_container)
 
         self._configure_purchase_grid(self.rows_container)
-        self._build_scrolled_table_header()
 
         for _index in range(self.DEFAULT_ROW_COUNT):
             self._add_purchase_row(recalculate=False)
-
-        actions = tk.Frame(table, bg=COLORS["bg_secondary"])
-        actions.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(12, 0))
-        add_button = self._create_small_button(
-            actions,
-            text="+ Add purchase",
-            command=self._add_purchase_row,
-            variant="primary",
-        )
-        add_button.pack(side=tk.LEFT)
-
-        file_actions = tk.Frame(actions, bg=COLORS["bg_secondary"])
-        file_actions.pack(side=tk.RIGHT)
-        export_button = self._create_file_action_button(
-            file_actions,
-            text="Export xlsx",
-            icon="⇧",
-            command=self._export_to_excel,
-        )
-        export_button.pack(side=tk.LEFT, padx=(0, 8))
-        import_button = self._create_file_action_button(
-            file_actions,
-            text="Import xlsx",
-            icon="⇩",
-            command=self._import_from_excel,
-        )
-        import_button.pack(side=tk.LEFT)
-        self._bind_table_mousewheel(actions)
-        self._bind_table_mousewheel(add_button)
-        self._bind_table_mousewheel(file_actions)
-        self._bind_table_mousewheel(export_button)
-        self._bind_table_mousewheel(import_button)
 
     def _add_purchase_row(self, recalculate: bool = True) -> None:
         """Append one editable purchase row."""
@@ -370,11 +388,11 @@ class ProfitCalculatorWindow:
         frame.grid_columnconfigure(2, minsize=270, weight=1)
         frame.grid_columnconfigure(3, minsize=112, weight=0)
 
-    def _build_scrolled_table_header(self) -> None:
-        """Build column labels inside the same grid as purchase rows."""
-        header_frame = tk.Frame(self.rows_container, bg=COLORS["bg_secondary"])
+    def _build_fixed_table_header(self, table: tk.Frame) -> None:
+        """Build column labels above the scrollable purchase rows."""
+        header_frame = tk.Frame(table, bg=COLORS["bg_secondary"])
         self._configure_purchase_grid(header_frame)
-        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        header_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 8))
 
         labels = ("#", "Grams", "Bought total", "")
         for column, label in enumerate(labels):
@@ -485,6 +503,7 @@ class ProfitCalculatorWindow:
             if grams_var.get().strip() or bought_price_var.get().strip()
         ]
         total_grams, average_price, total_cost, profit = self._calculate_totals()
+        profit_percentage = self._calculate_profit_percentage(profit, total_cost)
         row_count = max(len(purchase_rows), 1)
 
         grams = tuple(row[0] for row in purchase_rows) + ("",) * (
@@ -502,6 +521,7 @@ class ProfitCalculatorWindow:
             "average bought price": (average_price, *summary_blanks),
             "cost basis": (total_cost, *summary_blanks),
             "profit/loss": (profit, *summary_blanks),
+            "profit/loss %": (profit_percentage, *summary_blanks),
         }
 
     def _extract_import_rows(self, table: dict[str, tuple]) -> list[tuple[str, str]]:
@@ -543,7 +563,7 @@ class ProfitCalculatorWindow:
     def _renumber_rows(self) -> None:
         """Refresh row numbers after add/remove actions."""
         for index, row_frame in enumerate(self._row_frames, start=1):
-            row_frame.grid(row=index, column=0, sticky="ew", pady=4)
+            row_frame.grid(row=index - 1, column=0, sticky="ew", pady=4)
             number_label = row_frame.grid_slaves(row=0, column=0)[0]
             number_label.config(text=str(index))
 
@@ -666,12 +686,16 @@ class ProfitCalculatorWindow:
         """Recalculate totals and profit from the current rows."""
         total_grams, average_price, total_cost, profit = self._calculate_totals()
         current_value = self.current_price_per_gram * total_grams
+        break_even_price = self._calculate_break_even_price(total_grams, total_cost)
+        profit_percentage = self._calculate_profit_percentage(profit, total_cost)
 
         self.total_grams_var.set(f"{total_grams:,.2f} g")
         self.average_price_var.set(f"{average_price:,.2f} EGP/g")
         self.cost_basis_var.set(f"{total_cost:,.2f} EGP")
         self.current_value_var.set(f"Current market value: {current_value:,.2f} EGP")
+        self.break_even_var.set(f"Break-even price: {break_even_price:,.2f} EGP/g")
         self.profit_var.set(f"{profit:,.2f} EGP")
+        self.profit_percent_var.set(f"Profit/loss: {profit_percentage:+,.2f}%")
 
         if total_grams <= 0 or self.current_price_per_gram <= 0 or profit == 0:
             color = COLORS["text_soft"]
@@ -682,6 +706,8 @@ class ProfitCalculatorWindow:
 
         if hasattr(self, "profit_label"):
             self.profit_label.config(fg=color)
+        if hasattr(self, "profit_percent_label"):
+            self.profit_percent_label.config(fg=color)
 
     def _calculate_totals(self) -> tuple[float, float, float, float]:
         """Calculate numeric totals from the current purchase rows."""
@@ -701,6 +727,22 @@ class ProfitCalculatorWindow:
             else 0.0
         )
         return total_grams, average_price, total_cost, profit
+
+    def _calculate_break_even_price(
+        self,
+        total_grams: float,
+        total_cost: float,
+    ) -> float:
+        """Return the per-gram price needed to avoid a loss."""
+        if total_grams <= 0:
+            return 0.0
+        return total_cost / total_grams
+
+    def _calculate_profit_percentage(self, profit: float, total_cost: float) -> float:
+        """Return profit or loss as a percentage of cost basis."""
+        if total_cost <= 0:
+            return 0.0
+        return (profit / total_cost) * 100
 
     def _format_current_price(self) -> str:
         """Format the current market price used for profit calculations."""
