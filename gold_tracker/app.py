@@ -1,11 +1,14 @@
 import logging
+import sys
 import tkinter as tk
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from .config import (
     WINDOW_TITLE,
     WINDOW_SIZE,
+    APP_ICON_PATH,
     COLORS,
     REFRESH_INTERVAL_MS,
     HISTORY_DAYS,
@@ -33,6 +36,12 @@ from .ui.profit_calculator_window import ProfitCalculatorWindow
 logger = logging.getLogger(__name__)
 
 
+def _resource_path(relative_path: str) -> Path:
+    """Resolve a bundled resource path for source and PyInstaller runs."""
+    base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return base_path / relative_path
+
+
 class GoldTracker:
     """Main application controller for the GoldTracker desktop app."""
 
@@ -46,6 +55,7 @@ class GoldTracker:
         self.root.maxsize(fixed_width, fixed_height)
         self.root.configure(bg=COLORS["bg_primary"])
         self.root.resizable(False, False)
+        self._set_window_icon()
 
         self.price_fetcher = GoldPriceFetcher()
         self._state_lock = threading.RLock()
@@ -76,6 +86,18 @@ class GoldTracker:
         logger.info("Initializing GoldTracker UI")
         self.setup_ui()
         self.fetch_price()
+
+    def _set_window_icon(self) -> None:
+        """Apply the app icon when the resource is available."""
+        icon_path = _resource_path(APP_ICON_PATH)
+        if not icon_path.exists():
+            logger.debug("App icon was not found at %s", icon_path)
+            return
+
+        try:
+            self.root.iconbitmap(default=str(icon_path))
+        except tk.TclError as exc:
+            logger.debug("Could not set app icon: %s", exc)
 
     def _queue_ui_update(self, callback) -> None:
         """Schedule a Tkinter update only while the window is still alive."""
