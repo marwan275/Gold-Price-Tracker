@@ -8,6 +8,7 @@ APP_NAME = "GoldTracker"
 WINDOW_TITLE = "24K Gold Tracker"
 WINDOW_SIZE = "1000x820"
 FONT_FAMILY = "Segoe UI"
+APP_ICON_PATH = "assets/gold_tracker.ico"
 
 COLORS = {
     "bg_primary": "#1a1a2e",
