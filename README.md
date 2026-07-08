@@ -12,9 +12,11 @@ The dashboard prefers the Egypt market feed when it is available, shows a worldw
 
 The app is built around the Egyptian BTC 10g 24K ingot listing configured in `gold_tracker/config.py`, the `GoldPrice.Today` live API, and Yahoo Finance historical data for `GC=F`.
 
-<img width="1252" height="1065" alt="Screenshot 2026-07-05 125550" src="https://github.com/user-attachments/assets/bc73086e-80ea-4211-a41e-283c97d64d53" />
-<img width="1127" height="990" alt="Screenshot 2026-07-05 125746" src="https://github.com/user-attachments/assets/7c4361cb-1db9-4efb-b25c-16b772bda0df" />
-<img width="1302" height="940" alt="Screenshot 2026-07-05 160605" src="https://github.com/user-attachments/assets/e7542896-9a10-4f37-a50a-9323ce7882b6" />
+<img width="1920" height="1140" alt="image" src="https://github.com/user-attachments/assets/d2799b11-7d6d-4df8-98a5-4aa37896ed40" />
+
+<img width="1920" height="1140" alt="image" src="https://github.com/user-attachments/assets/bc98f578-c313-48ec-9448-e6363078a8d2" />
+
+<img width="1920" height="1140" alt="image" src="https://github.com/user-attachments/assets/6ee004af-c514-4358-b301-263cdac661d3" />
 
 
 ## Highlights
