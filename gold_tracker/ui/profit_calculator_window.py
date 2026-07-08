@@ -41,6 +41,7 @@ class ProfitCalculatorWindow:
         self._row_price_per_gram_labels: list[tk.Label] = []
         self._row_profit_labels: list[tk.Label] = []
         self._row_frames: list[tk.Frame] = []
+        self._metric_value_fonts: list[tuple[tk.StringVar, tkfont.Font]] = []
 
         self.total_grams_var = tk.StringVar(value="0.00 g")
         self.average_price_var = tk.StringVar(value="0.00 EGP/g")
@@ -135,7 +136,7 @@ class ProfitCalculatorWindow:
         ).pack(anchor="w")
         tk.Label(
             header_text,
-            text="Enter each purchase as grams and the total price paid for that row.",
+            text="Enter your grams and the total amount paid to calculate profit or loss.",
             font=self.subtitle_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -145,7 +146,7 @@ class ProfitCalculatorWindow:
         live_badge.grid(row=0, column=1, sticky="e", padx=(18, 0))
         tk.Label(
             live_badge,
-            text="LIVE PRICE",
+            text="CURRENT PRICE",
             font=self.small_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_tertiary"],
@@ -175,7 +176,12 @@ class ProfitCalculatorWindow:
         summary = tk.Frame(container, bg=COLORS["bg_primary"])
         summary.grid(row=2, column=0, sticky="ew")
         for column in range(3):
-            summary.grid_columnconfigure(column, weight=1)
+            summary.grid_columnconfigure(
+                column,
+                weight=1,
+                uniform="summary_metric",
+                minsize=260,
+            )
 
         self._build_metric_card(
             summary,
@@ -187,14 +193,14 @@ class ProfitCalculatorWindow:
         self._build_metric_card(
             summary,
             column=1,
-            title="AVERAGE BOUGHT PRICE",
+            title="AVERAGE BUY PRICE",
             value_var=self.average_price_var,
             accent=COLORS["warning"],
         )
         self._build_metric_card(
             summary,
             column=2,
-            title="COST BASIS",
+            title="TOTAL PAID",
             value_var=self.cost_basis_var,
             accent=COLORS["text_soft"],
         )
@@ -264,7 +270,7 @@ class ProfitCalculatorWindow:
         actions.grid(row=1, column=0, columnspan=6, sticky="ew", pady=(0, 12))
         add_button = self._create_small_button(
             actions,
-            text="+ Add purchase",
+            text="+ Add Row",
             command=self._add_purchase_row,
             variant="primary",
         )
@@ -274,14 +280,14 @@ class ProfitCalculatorWindow:
         file_actions.pack(side=tk.RIGHT)
         export_button = self._create_file_action_button(
             file_actions,
-            text="Export xlsx",
+            text="Export Excel",
             icon="⇧",
             command=self._export_to_excel,
         )
         export_button.pack(side=tk.LEFT, padx=(0, 8))
         import_button = self._create_file_action_button(
             file_actions,
-            text="Import xlsx",
+            text="Import Excel",
             icon="⇩",
             command=self._import_from_excel,
         )
@@ -466,7 +472,7 @@ class ProfitCalculatorWindow:
             width=scrollbar_width + self.ROW_SCROLLBAR_GAP,
         ).grid(row=0, column=1, sticky="ns")
 
-        labels = ("#", "Grams", "Bought total", "Price/g", "Row P/L", "")
+        labels = ("#", "Grams", "Total Paid", "Paid per Gram", "Profit / Loss", "")
         for column, label in enumerate(labels):
             tk.Label(
                 header_frame,
@@ -525,7 +531,7 @@ class ProfitCalculatorWindow:
         """Export purchase rows and summary totals to an Excel workbook."""
         file_name = filedialog.asksaveasfilename(
             parent=self.window,
-            title="Export profit calculator",
+            title="Export calculator data",
             defaultextension=".xlsx",
             filetypes=(("Excel workbook", "*.xlsx"),),
         )
@@ -544,7 +550,7 @@ class ProfitCalculatorWindow:
 
         messagebox.showinfo(
             "Export complete",
-            "Profit calculator data was exported successfully.",
+            "Calculator data was exported successfully.",
             parent=self.window,
         )
 
@@ -552,7 +558,7 @@ class ProfitCalculatorWindow:
         """Import purchase rows from an Excel workbook."""
         file_name = filedialog.askopenfilename(
             parent=self.window,
-            title="Import profit calculator",
+            title="Import calculator data",
             filetypes=(("Excel workbook", "*.xlsx"),),
         )
         if not file_name:
@@ -578,11 +584,13 @@ class ProfitCalculatorWindow:
 
     def _build_excel_export_data(self) -> dict[str, tuple]:
         """Return calculator data in the column-oriented Excel format."""
-        purchase_rows = [
-            (grams_var.get().strip(), bought_price_var.get().strip())
-            for grams_var, bought_price_var in self._rows
-            if grams_var.get().strip() or bought_price_var.get().strip()
-        ]
+        purchase_rows: list[tuple[str, str]] = []
+        for grams_var, bought_price_var in self._rows:
+            grams = grams_var.get().strip()
+            bought_total = bought_price_var.get().strip()
+            if grams or bought_total:
+                purchase_rows.append((grams, bought_total))
+
         total_grams, average_price, total_cost, profit = self._calculate_totals()
         profit_percentage = self._calculate_profit_percentage(profit, total_cost)
         row_price_per_gram_values = self._calculate_row_price_per_gram_values(
@@ -748,6 +756,8 @@ class ProfitCalculatorWindow:
             padx=(0 if column == 0 else 6, 0 if column == 2 else 6),
         )
         panel.configure(padx=14, pady=12)
+        shell.grid_propagate(False)
+        shell.configure(height=112)
 
         tk.Frame(panel, bg=accent, height=4).pack(fill=tk.X, pady=(0, 10))
         tk.Label(
@@ -757,13 +767,44 @@ class ProfitCalculatorWindow:
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
         ).pack(anchor="w")
+        value_font = tkfont.Font(family=FONT_FAMILY, size=15, weight="bold")
+        value_var.trace_add(
+            "write",
+            lambda *_args, var=value_var, font=value_font: self._sync_metric_font(
+                var,
+                font,
+            ),
+        )
+        self._metric_value_fonts.append((value_var, value_font))
         tk.Label(
             panel,
             textvariable=value_var,
-            font=self.metric_font,
+            font=value_font,
             fg=COLORS["text_primary"],
             bg=COLORS["bg_secondary"],
-        ).pack(anchor="w", pady=(8, 0))
+            anchor="w",
+            width=18,
+        ).pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        self._sync_metric_font(value_var, value_font)
+
+    def _sync_metric_font(
+        self, value_var: tk.StringVar, value_font: tkfont.Font
+    ) -> None:
+        """Shrink one metric value without changing the card dimensions."""
+        value_length = len(value_var.get())
+        if value_length > 28:
+            font_size = 10
+        elif value_length > 24:
+            font_size = 11
+        elif value_length > 20:
+            font_size = 12
+        elif value_length > 16:
+            font_size = 13
+        else:
+            font_size = 15
+
+        if value_font.cget("size") != font_size:
+            value_font.configure(size=font_size)
 
     def _create_surface(
         self,

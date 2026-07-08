@@ -1,5 +1,6 @@
 """Gold price fetching for live quotes and historical trend data."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import os
@@ -105,6 +106,47 @@ class GoldPriceFetcher:
         """Store the latest successful price for one source."""
         self._cached_prices[source_key] = (price, time.time())
 
+    def _handle_source_failure(
+        self,
+        source_key: str,
+        source_name: str,
+        exc: Exception,
+        stale_cache: dict[str, float] | None,
+        errors: list[str],
+        unexpected: bool = False,
+    ) -> float | None:
+        """Record one failed source and use stale cache for that source if available."""
+        errors.append(f"{source_name}: {exc}")
+        if unexpected:
+            logger.exception(
+                "Unexpected error while fetching %s gold price",
+                source_name.lower(),
+            )
+        else:
+            logger.warning(
+                "Failed to fetch %s gold price: %s",
+                source_name.lower(),
+                exc,
+            )
+
+        if stale_cache and source_key in stale_cache:
+            # Fall back per source so a cached local price can still pair with a fresh global price.
+            return self._cached_fallback(source_key, source_name, stale_cache)
+
+        return None
+
+    def _cached_fallback(
+        self,
+        source_key: str,
+        source_name: str,
+        stale_cache: dict[str, float],
+    ) -> float:
+        """Mark a source as served from stale cache."""
+        self.last_fetch_used_stale_cache = True
+        self.last_fetch_warnings.append(f"{source_name} cache fallback")
+        logger.warning("Using stale cached %s gold price", source_name.lower())
+        return stale_cache[source_key]
+
     def fetch(self, force_refresh: bool = False) -> dict[str, float]:
         """
         Fetch available EGP-per-gram prices from the configured live sources.
@@ -138,29 +180,41 @@ class GoldPriceFetcher:
         # Keep a short-lived backup snapshot so transient source failures do not blank the UI.
         stale_cache = self._get_cached_prices(STALE_CACHE_MAX_AGE_SECONDS)
 
-        for source_key, source_name, fetcher in sources:
-            if source_key in prices:
-                continue
+        missing_sources = [source for source in sources if source[0] not in prices]
+        if missing_sources:
+            with ThreadPoolExecutor(max_workers=len(missing_sources)) as executor:
+                future_to_source = {
+                    executor.submit(fetcher): (source_key, source_name)
+                    for source_key, source_name, fetcher in missing_sources
+                }
 
-            try:
-                prices[source_key] = fetcher()
-                self._update_cache(source_key, prices[source_key])
-            except PriceFetchError as exc:
-                errors.append(f"{source_name}: {exc}")
-                logger.warning(
-                    "Failed to fetch %s gold price: %s",
-                    source_name.lower(),
-                    exc,
-                )
-                if stale_cache and source_key in stale_cache:
-                    # Fall back per source so a cached local price can still pair with a fresh global price.
-                    prices[source_key] = stale_cache[source_key]
-                    self.last_fetch_used_stale_cache = True
-                    self.last_fetch_warnings.append(f"{source_name} cache fallback")
-                    logger.warning(
-                        "Using stale cached %s gold price",
-                        source_name.lower(),
-                    )
+                for future in as_completed(future_to_source):
+                    source_key, source_name = future_to_source[future]
+                    try:
+                        price = future.result()
+                        prices[source_key] = price
+                        self._update_cache(source_key, price)
+                    except PriceFetchError as exc:
+                        fallback_price = self._handle_source_failure(
+                            source_key,
+                            source_name,
+                            exc,
+                            stale_cache,
+                            errors,
+                        )
+                        if fallback_price is not None:
+                            prices[source_key] = fallback_price
+                    except Exception as exc:
+                        fallback_price = self._handle_source_failure(
+                            source_key,
+                            source_name,
+                            exc,
+                            stale_cache,
+                            errors,
+                            unexpected=True,
+                        )
+                        if fallback_price is not None:
+                            prices[source_key] = fallback_price
 
         if not prices:
             if stale_cache is not None:

@@ -149,7 +149,7 @@ class HistoryWindow:
 
         tk.Label(
             left,
-            text="History Overview",
+            text="Gold Price History",
             font=title_font,
             fg=COLORS["gold"],
             bg=COLORS["bg_secondary"],
@@ -157,7 +157,7 @@ class HistoryWindow:
 
         tk.Label(
             left,
-            text="Daily gold futures closes converted into USD per gram for faster context.",
+            text="View the global gold price trend converted to a per-gram price.",
             font=subtitle_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -247,7 +247,7 @@ class HistoryWindow:
 
         tk.Label(
             left,
-            text="Trend View",
+            text="Price Trend",
             font=heading_font,
             fg=COLORS["text_primary"],
             bg=COLORS["bg_secondary"],
@@ -255,7 +255,7 @@ class HistoryWindow:
 
         tk.Label(
             left,
-            text="Gold line shows the close, the dashed line shows the average, and the final point is highlighted.",
+            text="The solid line shows daily closes, the dashed line shows the average, and the final point marks the latest close.",
             font=meta_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],

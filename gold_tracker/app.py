@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import (
-    WINDOW_TITLE,
+    APP_NAME,
     WINDOW_SIZE,
     APP_ICON_PATH,
     COLORS,
@@ -49,7 +49,7 @@ class GoldTracker:
     def __init__(self, root):
         """Initialize the application window, state, and background services."""
         self.root = root
-        self.root.title(WINDOW_TITLE)
+        self.root.title(APP_NAME)
         self.root.geometry(WINDOW_SIZE)
         fixed_width, fixed_height = self._parse_window_size(WINDOW_SIZE)
         self.root.minsize(fixed_width, fixed_height)
@@ -65,13 +65,13 @@ class GoldTracker:
         self.prices: dict[str, float] = {}
         self.price_per_gram = 0
         self.previous_price = 0
-        self.total_value = tk.StringVar(value="Loading...")
-        self.last_update = tk.StringVar(value="Pending")
-        self.trend_text = tk.StringVar(value="● Awaiting first sync")
+        self.total_value = tk.StringVar(value="--")
+        self.last_update = tk.StringVar(value="Not updated yet")
+        self.trend_text = tk.StringVar(value="● Waiting for first price update")
         self.egypt_price_text = tk.StringVar(value="Waiting...")
         self.world_price_text = tk.StringVar(value="Waiting...")
         self.price_note_text = tk.StringVar(
-            value="Per-gram value appears after the first successful source sync."
+            value="Per-gram price appears after the first successful update."
         )
         self.dashboard_view: MainDashboardView | None = None
         self.app_shell: AppShell | None = None
@@ -81,6 +81,10 @@ class GoldTracker:
         self._is_closing = False
         self._fetch_worker = BackgroundWorkerSlot("price refresh")
         self._history_worker = BackgroundWorkerSlot("history loader")
+        self.history_series: HistoricalPriceSeries | None = None
+        self.history_load_error: str | None = None
+        self.is_history_loading = False
+        self._show_history_when_loaded = False
         self.history_window: HistoryWindow | None = None
         self.profit_calculator_window: ProfitCalculatorWindow | None = None
 
@@ -89,6 +93,7 @@ class GoldTracker:
         logger.info("Initializing GoldTracker UI")
         self.setup_ui()
         self.fetch_price()
+        self.prefetch_history()
 
     def _set_window_icon(self) -> None:
         """Apply the app icon when the resource is available."""
@@ -147,7 +152,7 @@ class GoldTracker:
             self.egypt_price_text.set("Unavailable")
             self.world_price_text.set("Unavailable")
             self.price_note_text.set(
-                "Per-gram value is unavailable until at least one live source responds."
+                "Per-gram price is unavailable until at least one live price responds."
             )
         self.status_label.config(text=status_text, fg=COLORS["error"])
         if reset_value:
@@ -170,11 +175,11 @@ class GoldTracker:
 
         if source_label and price_per_gram > 0:
             self.price_note_text.set(
-                f"Primary feed: {source_label} • {price_per_gram:,.2f} EGP per gram"
+                f"Using {source_label}: {price_per_gram:,.2f} EGP per gram"
             )
         else:
             self.price_note_text.set(
-                "Per-gram value appears after the first successful source sync."
+                "Per-gram price appears after the first successful update."
             )
 
         if (
@@ -206,18 +211,6 @@ class GoldTracker:
 
         self._fetch_worker.request_shutdown()
         self._history_worker.request_shutdown()
-        fetch_thread_alive = self._fetch_worker.join()
-        self._history_worker.join()
-
-        if fetch_thread_alive:
-            logger.warning(
-                "Skipping fetcher close because price refresh is still running"
-            )
-        else:
-            try:
-                self.price_fetcher.close()
-            except Exception:
-                logger.exception("Failed to close price fetcher cleanly")
 
         try:
             if self.history_window is not None and self.history_window.is_open():
@@ -240,6 +233,19 @@ class GoldTracker:
             self.root.destroy()
         except tk.TclError:
             logger.debug("Root window was already destroyed")
+
+        fetch_thread_alive = self._fetch_worker.join(timeout=0.2)
+        self._history_worker.join(timeout=0.2)
+
+        if fetch_thread_alive:
+            logger.warning(
+                "Skipping fetcher close because price refresh is still running"
+            )
+        else:
+            try:
+                self.price_fetcher.close()
+            except Exception:
+                logger.exception("Failed to close price fetcher cleanly")
 
     def setup_ui(self):
         """Build the main dashboard view and capture key widget references."""
@@ -308,13 +314,15 @@ class GoldTracker:
 
     def _build_refresh_status(self, primary_feed: str) -> tuple[str, str]:
         """Return the dashboard status text and color for the latest fetch."""
-        status_text = f"Live sync healthy • Primary feed: {primary_feed}"
+        status_text = f"Prices updated - using {primary_feed}"
         status_color = COLORS["success"]
         if self.price_fetcher.last_fetch_used_stale_cache:
-            status_text = f"Cached fallback active • Primary feed: {primary_feed}"
+            status_text = f"Using recent saved prices - {primary_feed}"
             status_color = COLORS["warning"]
         elif self.price_fetcher.last_fetch_warnings:
-            status_text = f"One source degraded • Primary feed: {primary_feed}"
+            status_text = (
+                f"Updated with one price feed unavailable - using {primary_feed}"
+            )
             status_color = COLORS["warning"]
         return status_text, status_color
 
@@ -329,12 +337,12 @@ class GoldTracker:
             self.dashboard_view.disable_button(self.refresh_btn)
 
         if silent:
-            self.status_label.config(text="Auto-refreshing...", fg=COLORS["text_muted"])
+            self.status_label.config(text="Updating prices...", fg=COLORS["text_muted"])
         else:
             self.status_label.config(
-                text="Fetching live price...", fg=COLORS["text_muted"]
+                text="Fetching latest prices...", fg=COLORS["text_muted"]
             )
-            self.total_value.set("Loading...")
+            self.total_value.set("--")
 
         def fetch():
             try:
@@ -361,7 +369,7 @@ class GoldTracker:
                 logger.warning("Price refresh failed: %s", exc)
                 self._queue_ui_update(
                     lambda: self._apply_fetch_error(
-                        "Could not fetch price. Check connection.",
+                        "Could not update prices. Check your connection.",
                         reset_value=not silent,
                     )
                 )
@@ -444,7 +452,13 @@ class GoldTracker:
     def copy_value(self):
         """Copy the current calculated value to the clipboard."""
         value = self.total_value.get()
-        if value and value not in ("Loading...", "Error", "0.00"):
+        if value and value not in (
+            "--",
+            "Loading...",
+            "Loading latest price...",
+            "Error",
+            "0.00",
+        ):
             self.root.clipboard_clear()
             self.root.clipboard_append(value + " EGP")
             original_text = self.status_label.cget("text")
@@ -478,7 +492,7 @@ class GoldTracker:
                     fg=COLORS["text_soft"], bg=COLORS["bg_tertiary"]
                 )
         else:
-            self.trend_text.set("● Awaiting first sync")
+            self.trend_text.set("● Waiting for first price update")
             self.trend_label.config(fg=COLORS["text_soft"], bg=COLORS["bg_tertiary"])
 
     def update_timestamp(self):
@@ -506,12 +520,86 @@ class GoldTracker:
         self.fetch_price(silent=True)
         self.schedule_auto_refresh()
 
+    def prefetch_history(self) -> None:
+        """Load historical prices in the background before the History screen is opened."""
+        if not history_window_available():
+            self.history_load_error = history_window_unavailable_message()
+            self._sync_history_button_availability()
+            return
+
+        with self._state_lock:
+            if self._is_closing or self.is_history_loading or self.history_series:
+                return
+            self.is_history_loading = True
+            self.history_load_error = None
+
+        if self.app_shell is not None:
+            self.app_shell.set_history_enabled(True)
+
+        def load_history():
+            try:
+                history_series = fetch_historical_prices(days=HISTORY_DAYS)
+                logger.info(
+                    "Prefetched %s days of historical gold prices", HISTORY_DAYS
+                )
+                with self._state_lock:
+                    self.history_series = history_series
+                    self.history_load_error = None
+                self._queue_ui_update(
+                    lambda series=history_series: self._apply_history_prefetch_success(
+                        series
+                    )
+                )
+            except PriceFetchError as exc:
+                logger.warning("History prefetch failed: %s", exc)
+                with self._state_lock:
+                    self.history_load_error = str(exc)[:80]
+                self._queue_ui_update(
+                    lambda error=str(exc): self._apply_history_prefetch_error(error)
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Unexpected error while prefetching historical gold prices"
+                )
+                with self._state_lock:
+                    self.history_load_error = str(exc)[:80]
+                self._queue_ui_update(
+                    lambda error=str(exc): self._apply_history_prefetch_error(error)
+                )
+            finally:
+                with self._state_lock:
+                    self.is_history_loading = False
+
+        if not self._history_worker.start(load_history):
+            with self._state_lock:
+                self.is_history_loading = False
+
+    def _apply_history_prefetch_success(
+        self,
+        history_series: HistoricalPriceSeries,
+    ) -> None:
+        """Store prefetched history data and show it if the user already asked."""
+        self.history_series = history_series
+        self.history_load_error = None
+        self._enable_history_button()
+        if self._show_history_when_loaded:
+            self._show_history_when_loaded = False
+            self._show_cached_history()
+
+    def _apply_history_prefetch_error(self, error: str) -> None:
+        """Store history prefetch failure details for the History action."""
+        self.history_load_error = error[:80]
+        self._show_history_when_loaded = False
+        self._enable_history_button()
+        if not self._is_closing:
+            self.status_label.config(text="Could not load history", fg=COLORS["error"])
+
     def show_history(self):
         """Show the history screen with summary cards and a chart."""
         if self.history_window is not None and self.history_window.is_open():
             if self.app_shell is not None:
                 self.app_shell.show_view("history")
-            self.status_label.config(text="History view focused", fg=COLORS["success"])
+            self.status_label.config(text="History is ready", fg=COLORS["success"])
             return
 
         if not history_window_available():
@@ -521,48 +609,38 @@ class GoldTracker:
             )
             return
 
-        if self.dashboard_view is not None and self.history_btn is not None:
-            self.dashboard_view.disable_button(self.history_btn)
-        if self.app_shell is not None:
-            self.app_shell.set_history_enabled(False)
-        self.status_label.config(text="Loading history...", fg=COLORS["text_muted"])
+        if self.history_series is not None:
+            self._show_cached_history()
+            return
 
-        def load_and_show():
-            try:
-                history_series = fetch_historical_prices(days=HISTORY_DAYS)
+        if self.is_history_loading:
+            self._show_history_when_loaded = True
+            self.status_label.config(
+                text="Preparing history in the background...",
+                fg=COLORS["text_muted"],
+            )
+            return
 
-                logger.info("Loaded %s days of historical gold prices", HISTORY_DAYS)
-                self._queue_ui_update(lambda: self._open_history_window(history_series))
+        if self.history_load_error:
+            self.status_label.config(
+                text=f"History error: {self.history_load_error[:30]}...",
+                fg=COLORS["error"],
+            )
+            self.prefetch_history()
+            return
 
-            except PriceFetchError as e:
-                logger.warning("History load failed: %s", e)
-                error_msg = str(e)[:30]
-                self._queue_ui_update(
-                    lambda msg=error_msg: self.status_label.config(
-                        text=f"History error: {msg}...",
-                        fg=COLORS["error"],
-                    )
-                )
-                self._queue_ui_update(self._enable_history_button)
-            except Exception:
-                logger.exception(
-                    "Unexpected error while loading historical gold prices"
-                )
-                self._queue_ui_update(
-                    lambda: self.status_label.config(
-                        text="Error loading history",
-                        fg=COLORS["error"],
-                    )
-                )
-                self._queue_ui_update(self._enable_history_button)
+        self._show_history_when_loaded = True
+        self.status_label.config(
+            text="Preparing history in the background...",
+            fg=COLORS["text_muted"],
+        )
+        self.prefetch_history()
 
-        if not self._history_worker.start(load_and_show):
-            self._enable_history_button()
-            if not self._is_closing:
-                self.status_label.config(
-                    text="History is already loading",
-                    fg=COLORS["warning"],
-                )
+    def _show_cached_history(self) -> None:
+        """Create the History screen from already loaded history data."""
+        if self.history_series is None:
+            return
+        self._open_history_window(self.history_series)
 
     def show_profit_calculator(self):
         """Show the profit calculator screen."""
@@ -575,9 +653,7 @@ class GoldTracker:
             self.profit_calculator_window.update_market_price(price_per_gram)
             if self.app_shell is not None:
                 self.app_shell.show_view("profit")
-            self.status_label.config(
-                text="Profit calculator focused", fg=COLORS["success"]
-            )
+            self.status_label.config(text="Calculator is ready", fg=COLORS["success"])
             return
 
         self.profit_calculator_window = ProfitCalculatorWindow(
@@ -589,7 +665,7 @@ class GoldTracker:
         if self.app_shell is not None:
             self.app_shell.add_view("profit", self.profit_calculator_window.window)
             self.app_shell.show_view("profit")
-        self.status_label.config(text="Profit calculator opened", fg=COLORS["success"])
+        self.status_label.config(text="Calculator is ready", fg=COLORS["success"])
 
     def _handle_profit_calculator_closed(self) -> None:
         """Reset app state after the profit calculator is dismissed."""

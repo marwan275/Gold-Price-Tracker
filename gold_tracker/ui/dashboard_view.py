@@ -4,7 +4,7 @@ from collections.abc import Callable
 import tkinter as tk
 from tkinter import font as tkfont
 
-from ..config import COLORS, FONT_FAMILY, WINDOW_TITLE
+from ..config import APP_NAME, COLORS, FONT_FAMILY
 from .components import create_styled_button, create_surface, restore_button_style
 
 
@@ -51,6 +51,11 @@ class MainDashboardView:
             on_show_history=on_show_history,
             on_profit_calculator=on_profit_calculator,
         )
+        self.total_value_var.trace_add(
+            "write",
+            lambda *_args: self._sync_value_display_font(),
+        )
+        self._sync_value_display_font()
 
     def focus_grams_entry(self) -> None:
         """Place keyboard focus on the grams input field."""
@@ -77,6 +82,23 @@ class MainDashboardView:
     def restore_button_style(self, button: tk.Button) -> None:
         """Restore the default colors for a custom-styled button."""
         restore_button_style(button)
+
+    def _sync_value_display_font(self) -> None:
+        """Keep long calculated values inside the fixed dashboard card."""
+        value_length = len(self.total_value_var.get())
+        if value_length > 22:
+            font_size = 22
+        elif value_length > 18:
+            font_size = 26
+        elif value_length > 14:
+            font_size = 30
+        elif value_length > 11:
+            font_size = 34
+        else:
+            font_size = 38
+
+        if self.value_font.cget("size") != font_size:
+            self.value_font.configure(size=font_size)
 
     def _build_fonts(self) -> None:
         """Create the font objects shared by the dashboard widgets."""
@@ -106,6 +128,7 @@ class MainDashboardView:
         container = tk.Frame(self.root, bg=COLORS["bg_primary"], padx=24, pady=18)
         container.pack(fill=tk.BOTH, expand=True)
         container.grid_columnconfigure(0, weight=1)
+        container.grid_rowconfigure(1, weight=1)
 
         header_shell, header = self._create_surface(container)
         header_shell.grid(row=0, column=0, sticky="ew")
@@ -113,7 +136,7 @@ class MainDashboardView:
 
         tk.Label(
             header,
-            text=WINDOW_TITLE,
+            text="Today's Gold Price",
             font=self.title_font,
             fg=COLORS["gold"],
             bg=COLORS["bg_secondary"],
@@ -121,7 +144,7 @@ class MainDashboardView:
 
         tk.Label(
             header,
-            text="Track Egypt and global gold prices live, then open history when you need broader market context.",
+            text="Check the latest 24K gold price in EGP and calculate value by grams.",
             font=self.subtitle_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -130,9 +153,10 @@ class MainDashboardView:
         ).pack(anchor="w", pady=(8, 0))
 
         hero_row = tk.Frame(container, bg=COLORS["bg_primary"])
-        hero_row.grid(row=1, column=0, sticky="ew", pady=(18, 14))
-        hero_row.grid_columnconfigure(0, weight=1)
-        hero_row.grid_columnconfigure(1, weight=1)
+        hero_row.grid(row=1, column=0, sticky="nsew", pady=(18, 14))
+        hero_row.grid_columnconfigure(0, weight=1, uniform="hero", minsize=420)
+        hero_row.grid_columnconfigure(1, weight=1, uniform="hero", minsize=420)
+        hero_row.grid_rowconfigure(0, weight=1, minsize=260)
 
         controls_shell, controls_card = self._create_surface(hero_row)
         controls_shell.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
@@ -140,7 +164,7 @@ class MainDashboardView:
 
         tk.Label(
             controls_card,
-            text="WEIGHT SELECTOR",
+            text="GRAMS TO VALUE",
             font=self.section_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -148,7 +172,7 @@ class MainDashboardView:
 
         tk.Label(
             controls_card,
-            text="Type grams directly or use the stepper. Decimals are supported.",
+            text="Enter the weight you want to price. Decimals are supported.",
             font=self.subtitle_font,
             fg=COLORS["text_secondary"],
             bg=COLORS["bg_secondary"],
@@ -198,7 +222,7 @@ class MainDashboardView:
 
         tk.Label(
             controls_card,
-            text="Your estimate recalculates automatically whenever the market feed changes.",
+            text="The value updates automatically when prices refresh.",
             font=self.helper_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -212,7 +236,7 @@ class MainDashboardView:
 
         tk.Label(
             estimate_card,
-            text="PORTFOLIO ESTIMATE",
+            text="CURRENT VALUE",
             font=self.section_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -220,7 +244,7 @@ class MainDashboardView:
 
         tk.Label(
             estimate_card,
-            text="The main value card follows the Egypt market first and falls back safely when needed.",
+            text="Estimated value for the grams entered, using the best available live price.",
             font=self.subtitle_font,
             fg=COLORS["text_secondary"],
             bg=COLORS["bg_secondary"],
@@ -233,8 +257,10 @@ class MainDashboardView:
             bg=COLORS["bg_tertiary"],
             padx=18,
             pady=16,
+            height=96,
         )
         value_band.pack(fill=tk.X, pady=(14, 10))
+        value_band.pack_propagate(False)
 
         self.value_display = tk.Label(
             value_band,
@@ -243,8 +269,9 @@ class MainDashboardView:
             fg=COLORS["success"],
             bg=COLORS["bg_tertiary"],
             anchor="w",
+            width=14,
         )
-        self.value_display.pack(anchor="w")
+        self.value_display.pack(fill=tk.BOTH, expand=True)
 
         tk.Label(
             estimate_card,
@@ -285,15 +312,15 @@ class MainDashboardView:
             column=1,
             title="WORLD MARKET",
             value_var=self.world_price_var,
-            note="Converted live price per gram",
+            note="Global price converted to EGP/g",
             accent=COLORS["warning"],
         )
         self._build_summary_card(
             summary_row,
             column=2,
-            title="LAST SYNC",
+            title="LAST UPDATE",
             value_var=self.last_update_var,
-            note="Most recent refresh time",
+            note="Most recent price refresh",
             accent=COLORS["success"],
         )
 
@@ -302,7 +329,7 @@ class MainDashboardView:
 
         self.status_label = tk.Label(
             status_panel,
-            text="Preparing live market sync...",
+            text="Getting latest market prices...",
             font=self.subtitle_font,
             fg=COLORS["text_soft"],
             bg=COLORS["bg_secondary"],
@@ -320,7 +347,7 @@ class MainDashboardView:
 
         self.refresh_btn = self._create_action_button(
             actions_panel,
-            "Refresh data",
+            "Refresh prices",
             on_refresh,
             icon="↻",
         )

@@ -2,11 +2,12 @@
 
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .config import (
-    APP_NAME,
+    APP_DATA_DIR_NAME,
     LOG_BACKUP_COUNT,
     LOG_FILE_NAME,
     LOG_LEVEL,
@@ -16,14 +17,23 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 
+NOISY_DEPENDENCY_LOGGERS = (
+    "WDM",
+    "peewee",
+    "selenium",
+    "urllib3",
+    "webdriver_manager",
+    "yfinance",
+)
+
 
 def _get_log_directory() -> Path:
     """Return the preferred per-user directory for application log files."""
     local_appdata = os.getenv("LOCALAPPDATA")
     if local_appdata:
-        return Path(local_appdata) / APP_NAME / "logs"
+        return Path(local_appdata) / APP_DATA_DIR_NAME / "logs"
 
-    return Path.home() / f".{APP_NAME.lower()}" / "logs"
+    return Path.home() / f".{APP_DATA_DIR_NAME.lower()}" / "logs"
 
 
 def configure_logging() -> None:
@@ -31,7 +41,7 @@ def configure_logging() -> None:
     if getattr(configure_logging, "_configured", False):
         return
 
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
     fallback_warning: str | None = None
     log_path: Path | None = None
 
@@ -56,6 +66,8 @@ def configure_logging() -> None:
         handlers=handlers,
         force=True,
     )
+    for logger_name in NOISY_DEPENDENCY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
     configure_logging._configured = True
 
     if log_path is not None:
