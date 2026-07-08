@@ -14,8 +14,9 @@ The app is built around the Egyptian BTC 10g 24K ingot listing configured in `go
 - Shows Egypt market and worldwide EGP-per-gram prices on the dashboard.
 - Calculates the current value for the grams entered in the weight selector.
 - Refreshes prices automatically every minute and supports manual refreshes.
-- Opens a history window with a one-year USD-per-gram chart from Yahoo Finance.
-- Opens a profit calculator for purchase lots, average paid price, cost basis, current profit or loss, and Excel import/export.
+- Uses a left sidebar to switch between the dashboard, history, and profit calculator screens in one window.
+- Shows a one-year USD-per-gram history chart from Yahoo Finance.
+- Includes a profit calculator for purchase lots, average paid price, cost basis, current profit or loss, and Excel import/export.
 - Writes logs to a per-user log directory, with console logging enabled during local runs.
 
 ## Requirements
@@ -75,12 +76,13 @@ The Egypt market price is based on the BTC 10g 24K ingot listing divided by 10. 
 
 ## Code Layout
 
-- `gold_tracker/app.py` owns the Tk application lifecycle, shared state, and background refresh coordination.
-- `gold_tracker/models.py` contains shared data models used across services and UI windows.
+- `gold_tracker/app.py` owns the Tk application lifecycle, shared state, screen navigation, and background refresh coordination.
+- `gold_tracker/models.py` contains shared data models used across services and UI views.
 - `gold_tracker/core/app_workers.py` prevents duplicate background jobs from running at the same time.
 - `gold_tracker/services/price_fetcher.py` fetches live prices, parses the Egypt source page, caches recent results, and loads historical data.
 - `gold_tracker/services/excel_handler.py` imports and exports column-oriented Excel workbooks for calculator data.
-- `gold_tracker/ui/` contains the main dashboard, history window, profit calculator window, and shared UI components.
+- `gold_tracker/ui/app_shell.py` builds the single-window sidebar navigation shell.
+- `gold_tracker/ui/` contains the main dashboard, history view, profit calculator view, and shared UI components.
 - `gold_tracker/logging_config.py` configures console and rotating file logging.
 
 ## License

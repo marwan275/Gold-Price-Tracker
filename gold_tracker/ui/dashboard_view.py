@@ -315,7 +315,7 @@ class MainDashboardView:
         actions_shell, actions_panel = self._create_surface(container)
         actions_shell.grid(row=4, column=0, sticky="ew")
         actions_panel.configure(padx=12, pady=12)
-        for column in range(4):
+        for column in range(2):
             actions_panel.grid_columnconfigure(column, weight=1)
 
         self.refresh_btn = self._create_action_button(
@@ -340,33 +340,10 @@ class MainDashboardView:
             row=0,
             column=1,
             sticky="ew",
-            padx=8,
-        )
-        self.history_btn = self._create_action_button(
-            actions_panel,
-            "Open history",
-            on_show_history,
-            icon="▤",
-            variant="primary",
-        )
-        self.history_btn.grid(
-            row=0,
-            column=2,
-            sticky="ew",
-            padx=8,
-        )
-        self.profit_calculator_btn = self._create_action_button(
-            actions_panel,
-            "Profit calculator",
-            on_profit_calculator,
-            icon="$$",
-        )
-        self.profit_calculator_btn.grid(
-            row=0,
-            column=3,
-            sticky="ew",
             padx=(8, 0),
         )
+        self.history_btn = None
+        self.profit_calculator_btn = None
 
     def _create_surface(
         self,

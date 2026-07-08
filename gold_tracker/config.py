@@ -6,7 +6,7 @@ rest of the codebase can stay focused on behavior rather than constants.
 
 APP_NAME = "GoldTracker"
 WINDOW_TITLE = "24K Gold Tracker"
-WINDOW_SIZE = "1000x820"
+WINDOW_SIZE = "1400x860"
 FONT_FAMILY = "Segoe UI"
 APP_ICON_PATH = "assets/gold_tracker.ico"
 

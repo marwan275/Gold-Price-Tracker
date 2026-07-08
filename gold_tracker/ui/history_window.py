@@ -52,6 +52,7 @@ class HistoryWindow:
         parent: tk.Misc,
         history_series: HistoricalPriceSeries,
         on_close: Callable[[], None] | None = None,
+        embedded: bool = False,
     ):
         """Create the history window and initialize its chart state."""
         if not history_window_available():
@@ -59,19 +60,23 @@ class HistoryWindow:
 
         self.history_series = history_series
         self._on_close = on_close
+        self._embedded = embedded
         self._closed = False
         self._figure = None
         self._canvas = None
 
-        self.window = tk.Toplevel(parent)
-        self.window.title(HISTORY_WINDOW_TITLE)
-        self.window.geometry(HISTORY_WINDOW_SIZE)
-        self.window.minsize(HISTORY_WINDOW_MIN_WIDTH, HISTORY_WINDOW_MIN_HEIGHT)
-        self.window.configure(bg=COLORS["bg_primary"])
-        self.window.resizable(True, True)
-        self.window.transient(parent)
-        self.window.protocol("WM_DELETE_WINDOW", self.close)
-        self.window.bind("<Escape>", lambda _event: self.close())
+        if self._embedded:
+            self.window = tk.Frame(parent, bg=COLORS["bg_primary"])
+        else:
+            self.window = tk.Toplevel(parent)
+            self.window.title(HISTORY_WINDOW_TITLE)
+            self.window.geometry(HISTORY_WINDOW_SIZE)
+            self.window.minsize(HISTORY_WINDOW_MIN_WIDTH, HISTORY_WINDOW_MIN_HEIGHT)
+            self.window.configure(bg=COLORS["bg_primary"])
+            self.window.resizable(True, True)
+            self.window.transient(parent)
+            self.window.protocol("WM_DELETE_WINDOW", self.close)
+            self.window.bind("<Escape>", lambda _event: self.close())
 
         self._build_ui()
         self.lift()
@@ -83,6 +88,9 @@ class HistoryWindow:
     def lift(self) -> None:
         """Bring the window to the front."""
         if self.is_open():
+            if self._embedded:
+                self.window.focus_set()
+                return
             self.window.deiconify()
             self.window.lift()
             self.window.focus_force()
@@ -283,8 +291,6 @@ class HistoryWindow:
         footer.pack(fill=tk.X)
 
         meta_font = tkfont.Font(family=FONT_FAMILY, size=10)
-        button_font = tkfont.Font(family=FONT_FAMILY, size=11, weight="bold")
-
         tk.Label(
             footer,
             text=(
@@ -296,22 +302,7 @@ class HistoryWindow:
             bg=COLORS["bg_secondary"],
             justify="left",
             wraplength=760,
-        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12))
-
-        tk.Button(
-            footer,
-            text="Close Window",
-            font=button_font,
-            fg=COLORS["text_primary"],
-            bg=COLORS["button_bg"],
-            activebackground=COLORS["button_active"],
-            activeforeground=COLORS["text_primary"],
-            bd=0,
-            padx=24,
-            pady=10,
-            cursor="hand2",
-            command=self.close,
-        ).pack(side=tk.RIGHT)
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         return footer_shell
 

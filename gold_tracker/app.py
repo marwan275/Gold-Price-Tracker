@@ -24,6 +24,7 @@ from .services.price_fetcher import (
     fetch_historical_prices,
 )
 from .ui.dashboard_view import MainDashboardView
+from .ui.app_shell import AppShell
 from .ui.history_window import (
     HistoryWindow,
     HistoryWindowError,
@@ -52,9 +53,9 @@ class GoldTracker:
         self.root.geometry(WINDOW_SIZE)
         fixed_width, fixed_height = self._parse_window_size(WINDOW_SIZE)
         self.root.minsize(fixed_width, fixed_height)
-        self.root.maxsize(fixed_width, fixed_height)
         self.root.configure(bg=COLORS["bg_primary"])
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
+        self._maximize_root()
         self._set_window_icon()
 
         self.price_fetcher = GoldPriceFetcher()
@@ -73,6 +74,8 @@ class GoldTracker:
             value="Per-gram value appears after the first successful source sync."
         )
         self.dashboard_view: MainDashboardView | None = None
+        self.app_shell: AppShell | None = None
+        self.dashboard_frame: tk.Frame | None = None
         self.auto_refresh_id = None
         self.is_fetching = False
         self._is_closing = False
@@ -99,6 +102,16 @@ class GoldTracker:
         except tk.TclError as exc:
             logger.debug("Could not set app icon: %s", exc)
 
+    def _maximize_root(self) -> None:
+        """Open the main application window maximized when the platform supports it."""
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            try:
+                self.root.attributes("-zoomed", True)
+            except tk.TclError as exc:
+                logger.debug("Could not maximize app window: %s", exc)
+
     def _queue_ui_update(self, callback) -> None:
         """Schedule a Tkinter update only while the window is still alive."""
         with self._state_lock:
@@ -109,7 +122,7 @@ class GoldTracker:
             if self.root.winfo_exists():
                 # Tk widgets must only be updated from the main event loop thread.
                 self.root.after(0, callback)
-        except tk.TclError:
+        except (tk.TclError, RuntimeError):
             logger.debug("Skipping UI update because the window is closing")
 
     def _snapshot_price_state(self) -> tuple[dict[str, float], float, float]:
@@ -230,8 +243,20 @@ class GoldTracker:
 
     def setup_ui(self):
         """Build the main dashboard view and capture key widget references."""
-        self.dashboard_view = MainDashboardView(
+        self.app_shell = AppShell(
             root=self.root,
+            on_show_dashboard=self.show_dashboard,
+            on_show_profit=self.show_profit_calculator,
+            on_show_history=self.show_history,
+        )
+        self.dashboard_frame = tk.Frame(
+            self.app_shell.content_frame,
+            bg=COLORS["bg_primary"],
+        )
+        self.app_shell.add_view("dashboard", self.dashboard_frame)
+
+        self.dashboard_view = MainDashboardView(
+            root=self.dashboard_frame,
             grams_var=self.grams,
             total_value_var=self.total_value,
             trend_text_var=self.trend_text,
@@ -256,7 +281,15 @@ class GoldTracker:
         self.history_btn = self.dashboard_view.history_btn
         self.dashboard_view.focus_grams_entry()
         self._sync_history_button_availability()
+        self.show_dashboard()
         self.schedule_auto_refresh()
+
+    def show_dashboard(self) -> None:
+        """Show the main dashboard inside the app shell."""
+        if self.app_shell is not None:
+            self.app_shell.show_view("dashboard")
+        if self.dashboard_view is not None:
+            self.dashboard_view.focus_grams_entry()
 
     def _parse_window_size(self, window_size: str) -> tuple[int, int]:
         """Parse a Tk geometry size string like 1000x820 into integers."""
@@ -474,12 +507,11 @@ class GoldTracker:
         self.schedule_auto_refresh()
 
     def show_history(self):
-        """Open a separate history window with summary cards and a chart."""
+        """Show the history screen with summary cards and a chart."""
         if self.history_window is not None and self.history_window.is_open():
-            self.history_window.lift()
-            self.status_label.config(
-                text="History window focused", fg=COLORS["success"]
-            )
+            if self.app_shell is not None:
+                self.app_shell.show_view("history")
+            self.status_label.config(text="History view focused", fg=COLORS["success"])
             return
 
         if not history_window_available():
@@ -489,8 +521,10 @@ class GoldTracker:
             )
             return
 
-        if self.dashboard_view is not None:
+        if self.dashboard_view is not None and self.history_btn is not None:
             self.dashboard_view.disable_button(self.history_btn)
+        if self.app_shell is not None:
+            self.app_shell.set_history_enabled(False)
         self.status_label.config(text="Loading history...", fg=COLORS["text_muted"])
 
         def load_and_show():
@@ -531,7 +565,7 @@ class GoldTracker:
                 )
 
     def show_profit_calculator(self):
-        """Open the profit calculator window."""
+        """Show the profit calculator screen."""
         _, price_per_gram, _ = self._snapshot_price_state()
 
         if (
@@ -539,30 +573,40 @@ class GoldTracker:
             and self.profit_calculator_window.is_open()
         ):
             self.profit_calculator_window.update_market_price(price_per_gram)
-            self.profit_calculator_window.lift()
+            if self.app_shell is not None:
+                self.app_shell.show_view("profit")
             self.status_label.config(
                 text="Profit calculator focused", fg=COLORS["success"]
             )
             return
 
         self.profit_calculator_window = ProfitCalculatorWindow(
-            parent=self.root,
+            parent=self.app_shell.content_frame if self.app_shell else self.root,
             current_price_per_gram=price_per_gram,
             on_close=self._handle_profit_calculator_closed,
+            embedded=True,
         )
+        if self.app_shell is not None:
+            self.app_shell.add_view("profit", self.profit_calculator_window.window)
+            self.app_shell.show_view("profit")
         self.status_label.config(text="Profit calculator opened", fg=COLORS["success"])
 
     def _handle_profit_calculator_closed(self) -> None:
         """Reset app state after the profit calculator is dismissed."""
         self.profit_calculator_window = None
+        if self.app_shell is not None:
+            self.app_shell.remove_view("profit")
+        if not self._is_closing:
+            self.show_dashboard()
 
     def _open_history_window(self, history_series: HistoricalPriceSeries) -> None:
-        """Create the dedicated history window once data has loaded."""
+        """Create the history view once data has loaded."""
         try:
             self.history_window = HistoryWindow(
-                parent=self.root,
+                parent=self.app_shell.content_frame if self.app_shell else self.root,
                 history_series=history_series,
                 on_close=self._handle_history_window_closed,
+                embedded=True,
             )
         except HistoryWindowError as exc:
             logger.warning("Unable to open history window: %s", exc)
@@ -570,15 +614,22 @@ class GoldTracker:
             self._enable_history_button()
             return
 
-        logger.info("History window opened")
+        if self.app_shell is not None:
+            self.app_shell.add_view("history", self.history_window.window)
+            self.app_shell.show_view("history")
+
+        logger.info("History view opened")
         self.status_label.config(text="History loaded", fg=COLORS["success"])
         self._enable_history_button()
 
     def _handle_history_window_closed(self) -> None:
         """Reset app state after the history window is dismissed."""
         self.history_window = None
+        if self.app_shell is not None:
+            self.app_shell.remove_view("history")
         if not self._is_closing:
             self._enable_history_button()
+            self.show_dashboard()
 
     def _enable_history_button(self):
         """Re-enable the history button."""
@@ -587,7 +638,10 @@ class GoldTracker:
 
         try:
             if self.dashboard_view is not None:
-                self.dashboard_view.enable_button(self.history_btn)
+                if self.history_btn is not None:
+                    self.dashboard_view.enable_button(self.history_btn)
+            if self.app_shell is not None:
+                self.app_shell.set_history_enabled(True)
         except tk.TclError:
             logger.debug("History button was already destroyed")
 
@@ -609,11 +663,17 @@ class GoldTracker:
             return
 
         if history_window_available():
-            self.dashboard_view.enable_button(self.history_btn)
+            if self.history_btn is not None:
+                self.dashboard_view.enable_button(self.history_btn)
+            if self.app_shell is not None:
+                self.app_shell.set_history_enabled(True)
             return
 
         # Keep the action visibly unavailable when chart dependencies are missing.
-        self.dashboard_view.disable_button(self.history_btn)
+        if self.history_btn is not None:
+            self.dashboard_view.disable_button(self.history_btn)
+        if self.app_shell is not None:
+            self.app_shell.set_history_enabled(False)
 
     def _restore_status_message(
         self,

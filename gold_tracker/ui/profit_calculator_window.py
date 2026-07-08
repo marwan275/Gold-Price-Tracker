@@ -28,10 +28,12 @@ class ProfitCalculatorWindow:
         parent: tk.Misc,
         current_price_per_gram: float,
         on_close: Callable[[], None] | None = None,
+        embedded: bool = False,
     ) -> None:
         """Create the profit calculator window."""
         self.current_price_per_gram = current_price_per_gram
         self._on_close = on_close
+        self._embedded = embedded
         self._closed = False
         self._rows: list[tuple[tk.StringVar, tk.StringVar]] = []
         self._row_price_per_gram_vars: list[tk.StringVar] = []
@@ -49,15 +51,18 @@ class ProfitCalculatorWindow:
         self.profit_var = tk.StringVar(value="0.00 EGP")
         self.profit_percent_var = tk.StringVar(value="Profit/loss: 0.00%")
 
-        self.window = tk.Toplevel(parent)
-        self.window.title(PROFIT_WINDOW_TITLE)
-        self.window.geometry(PROFIT_WINDOW_SIZE)
-        self.window.minsize(PROFIT_WINDOW_MIN_WIDTH, PROFIT_WINDOW_MIN_HEIGHT)
-        self.window.configure(bg=COLORS["bg_primary"])
-        self.window.resizable(False, False)
-        self.window.transient(parent)
-        self.window.protocol("WM_DELETE_WINDOW", self.close)
-        self.window.bind("<Escape>", lambda _event: self.close())
+        if self._embedded:
+            self.window = tk.Frame(parent, bg=COLORS["bg_primary"])
+        else:
+            self.window = tk.Toplevel(parent)
+            self.window.title(PROFIT_WINDOW_TITLE)
+            self.window.geometry(PROFIT_WINDOW_SIZE)
+            self.window.minsize(PROFIT_WINDOW_MIN_WIDTH, PROFIT_WINDOW_MIN_HEIGHT)
+            self.window.configure(bg=COLORS["bg_primary"])
+            self.window.resizable(False, False)
+            self.window.transient(parent)
+            self.window.protocol("WM_DELETE_WINDOW", self.close)
+            self.window.bind("<Escape>", lambda _event: self.close())
 
         self._build_fonts()
         self._build_ui()
@@ -71,6 +76,9 @@ class ProfitCalculatorWindow:
     def lift(self) -> None:
         """Bring the calculator window to the front."""
         if self.is_open():
+            if self._embedded:
+                self.window.focus_set()
+                return
             self.window.deiconify()
             self.window.lift()
             self.window.focus_force()
