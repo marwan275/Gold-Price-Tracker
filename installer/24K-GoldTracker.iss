@@ -1,10 +1,10 @@
-#define MyAppName "GoldTracker"
-#define MyAppVersion "1.0.0"
+#define MyAppName "24K-GoldTracker"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Marwan Mobarak"
-#define MyAppExeName "GoldTracker.exe"
+#define MyAppExeName "24K-GoldTracker-1.1.0.exe"
 
 [Setup]
-AppId={{8E4E42BF-7F18-44F2-89B9-6F56C088A51E}
+AppId={{8E4E42BF-7F18-44F2-89B9-6F56C088A51E}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -12,8 +12,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=GoldTrackerSetup-{#MyAppVersion}
-SetupIconFile=..\assets\gold_tracker.ico
+OutputBaseFilename={#MyAppName}Setup-{#MyAppVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma
 SolidCompression=yes
@@ -28,7 +27,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "..\dist\GoldTracker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\24K-GoldTracker-1.1.0\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"

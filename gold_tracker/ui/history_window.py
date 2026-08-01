@@ -1,8 +1,8 @@
 """Dedicated history window UI for GoldTracker."""
 
-from collections.abc import Callable
 import logging
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import font as tkfont
 
 try:
@@ -25,7 +25,6 @@ from ..config import (
     HISTORY_WINDOW_TITLE,
 )
 from ..models import HistoricalPriceSeries
-
 
 logger = logging.getLogger(__name__)
 

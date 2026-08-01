@@ -54,6 +54,7 @@ class GoldTracker:
         self.root.minsize(fixed_width, fixed_height)
         self.root.configure(bg=COLORS["bg_primary"])
         self.root.resizable(True, True)
+        self._app_icon_image: tk.PhotoImage | None = None
         self._maximize_root()
         self._set_window_icon()
 
@@ -102,7 +103,8 @@ class GoldTracker:
             return
 
         try:
-            self.root.iconbitmap(default=str(icon_path))
+            self._app_icon_image = tk.PhotoImage(file=str(icon_path))
+            self.root.iconphoto(True, self._app_icon_image)
         except tk.TclError as exc:
             logger.debug("Could not set app icon: %s", exc)
 
@@ -494,7 +496,7 @@ class GoldTracker:
 
     def update_timestamp(self):
         """Update the dashboard timestamp to the current local time."""
-        now = datetime.now().strftime("%I:%M:%S %p").lstrip("0")
+        now = datetime.now().astimezone().strftime("%I:%M:%S %p").lstrip("0")
         self.last_update.set(now)
 
     def schedule_auto_refresh(self):
@@ -712,9 +714,8 @@ class GoldTracker:
             return
 
         try:
-            if self.dashboard_view is not None:
-                if self.history_btn is not None:
-                    self.dashboard_view.enable_button(self.history_btn)
+            if self.dashboard_view is not None and self.history_btn is not None:
+                self.dashboard_view.enable_button(self.history_btn)
             if self.app_shell is not None:
                 self.app_shell.set_history_enabled(True)
         except tk.TclError:

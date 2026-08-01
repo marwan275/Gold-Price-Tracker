@@ -1,7 +1,7 @@
 """Single-window application shell with sidebar navigation."""
 
-from collections.abc import Callable
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import font as tkfont
 
 from ..config import APP_NAME, COLORS, FONT_FAMILY

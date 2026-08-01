@@ -1,10 +1,10 @@
 """Main dashboard view for GoldTracker."""
 
-from collections.abc import Callable
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import font as tkfont
 
-from ..config import APP_NAME, COLORS, FONT_FAMILY
+from ..config import COLORS, FONT_FAMILY
 from .components import create_styled_button, create_surface, restore_button_style
 
 

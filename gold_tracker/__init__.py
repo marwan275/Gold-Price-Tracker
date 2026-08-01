@@ -11,5 +11,18 @@ Modules:
     - ui: Tkinter views and shared UI components
 """
 
-__version__ = "1.0.0"
-__author__ = "Marwan Mobarak"
+from pathlib import Path
+
+import tomllib
+
+# Read version and author from pyproject.toml
+try:
+    _pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+    _pyproject = tomllib.loads(_pyproject_path.read_text(encoding="utf-8"))["project"]
+    __version__ = _pyproject["version"]
+    __author__ = (
+        _pyproject["authors"][0]["name"] if _pyproject.get("authors") else "unknown"
+    )
+except (FileNotFoundError, KeyError, IndexError):
+    __version__ = "unknown"
+    __author__ = "unknown"

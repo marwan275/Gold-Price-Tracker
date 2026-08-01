@@ -540,7 +540,7 @@ class ProfitCalculatorWindow:
 
         try:
             export_excel(file_name, self._build_excel_export_data())
-        except Exception as exc:
+        except (ValueError, OSError) as exc:
             messagebox.showerror(
                 "Export failed",
                 f"Could not export profit calculator data.\n\n{exc}",
@@ -567,7 +567,7 @@ class ProfitCalculatorWindow:
         try:
             table = import_excel(file_name)
             rows = self._extract_import_rows(table)
-        except Exception as exc:
+        except (ValueError, OSError) as exc:
             messagebox.showerror(
                 "Import failed",
                 f"Could not import profit calculator data.\n\n{exc}",

@@ -4,11 +4,11 @@ The module keeps UI, networking, caching, and logging values in one place so the
 rest of the codebase can stay focused on behavior rather than constants.
 """
 
-APP_NAME = "24K Gold Tracker"
-APP_DATA_DIR_NAME = "GoldTracker"
+APP_NAME = "24K-GoldTracker"
+APP_DATA_DIR_NAME = "24K-GoldTracker"
 WINDOW_SIZE = "1400x860"
 FONT_FAMILY = "Segoe UI"
-APP_ICON_PATH = "assets/gold_tracker.ico"
+APP_ICON_PATH = "assets/gold_tracker.png"
 
 COLORS = {
     "bg_primary": "#1a1a2e",

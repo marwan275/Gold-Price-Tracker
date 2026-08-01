@@ -1,8 +1,8 @@
 """Shared Tkinter UI helpers for GoldTracker."""
 
+import tkinter as tk
 from collections.abc import Callable
 from typing import Any
-import tkinter as tk
 
 from ..config import COLORS
 

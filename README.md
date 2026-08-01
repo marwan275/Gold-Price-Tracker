@@ -1,6 +1,6 @@
-# 24K Gold Tracker
+# 24K-GoldTracker
 
-24K Gold Tracker is a Windows-friendly desktop app for following 24K gold prices in Egyptian Pounds. It helps you check the latest market price, estimate the value of your gold by grams, review recent price history, and calculate profit or loss on purchases.
+24K-GoldTracker is a Windows-friendly desktop app for following 24K gold prices in Egyptian Pounds. It helps you check the latest market price, estimate the value of your gold by grams, review recent price history, and calculate profit or loss on purchases.
 
 The app opens as one maximized window with a simple left sidebar:
 
@@ -68,7 +68,7 @@ pip install -e .
 Start the app:
 
 ```bash
-gold-tracker
+24K-GoldTracker
 ```
 
 Or run it directly as a module:
@@ -147,9 +147,9 @@ Imports expect at least `grams` and `bought total` headers. Extra columns from e
 
 Logging is configured in `gold_tracker/logging_config.py` and controlled by constants in `gold_tracker/config.py`.
 
-- Windows log files are written under `%LOCALAPPDATA%\GoldTracker\logs\gold_tracker.log`.
-- Non-Windows fallback logs are written under `~/.goldtracker/logs/gold_tracker.log`.
-- Console logs are written to stdout, so PowerShell commands such as `gold-tracker | Tee-Object -FilePath test.log` capture app logs.
+- Windows log files are written under `%LOCALAPPDATA%\24K-GoldTracker\logs\gold_tracker.log`.
+- Non-Windows fallback logs are written under `~/.24k-goldtracker/logs/gold_tracker.log`.
+- Console logs are written to stdout, so PowerShell commands such as `24K-GoldTracker | Tee-Object -FilePath test.log` capture app logs.
 - Third-party debug noise from urllib3, yfinance, and peewee is suppressed to `WARNING` so app logs stay readable.
 
 To make app logs more verbose during development, change `LOG_LEVEL` in `gold_tracker/config.py`.
@@ -162,25 +162,25 @@ The repository includes a PyInstaller spec and an Inno Setup script.
 Build the folder-style executable first:
 
 ```powershell
-pyinstaller GoldTracker.spec
+pyinstaller 24K-GoldTracker.spec
 ```
 
 The executable should be created at:
 
 ```text
-dist\GoldTracker\GoldTracker.exe
+dist\24K-GoldTracker-1.1.0\24K-GoldTracker-1.1.0.exe
 ```
 
 Then build the installer with Inno Setup 6:
 
 ```powershell
-iscc installer\GoldTracker.iss
+iscc installer\24K-GoldTracker.iss
 ```
 
 The installer output is:
 
 ```text
-dist\GoldTrackerSetup.exe
+dist\24K-GoldTrackerSetup-1.1.0.exe
 ```
 
 See `installer/README.md` for the short installer-specific checklist.
