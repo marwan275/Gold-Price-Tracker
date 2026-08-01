@@ -1,30 +1,30 @@
 import logging
 import sys
-import tkinter as tk
 import threading
+import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 
 from .config import (
-    APP_NAME,
-    WINDOW_SIZE,
     APP_ICON_PATH,
+    APP_NAME,
     COLORS,
-    REFRESH_INTERVAL_MS,
     HISTORY_DAYS,
+    REFRESH_INTERVAL_MS,
+    WINDOW_SIZE,
 )
 from .core.app_workers import BackgroundWorkerSlot
 from .logging_config import configure_logging
 from .models import HistoricalPriceSeries
 from .services.price_fetcher import (
+    KEY_EGYPT,
+    KEY_WORLDWIDE,
     GoldPriceFetcher,
     PriceFetchError,
-    KEY_WORLDWIDE,
-    KEY_EGYPT,
     fetch_historical_prices,
 )
-from .ui.dashboard_view import MainDashboardView
 from .ui.app_shell import AppShell
+from .ui.dashboard_view import MainDashboardView
 from .ui.history_window import (
     HistoryWindow,
     HistoryWindowError,
@@ -32,7 +32,6 @@ from .ui.history_window import (
     history_window_unavailable_message,
 )
 from .ui.profit_calculator_window import ProfitCalculatorWindow
-
 
 logger = logging.getLogger(__name__)
 
@@ -174,9 +173,13 @@ class GoldTracker:
             source_label = None
 
         if source_label and price_per_gram > 0:
-            self.price_note_text.set(
-                f"Using {source_label}: {price_per_gram:,.2f} EGP per gram"
-            )
+            base_note = f"Using {source_label}: {price_per_gram:,.3f} EGP per gram"
+            if self.price_fetcher.last_fetch_used_stale_cache:
+                self.price_note_text.set(f"Recent saved price active. {base_note}")
+            elif self.price_fetcher.last_fetch_warnings:
+                self.price_note_text.set(f"Live update incomplete. {base_note}")
+            else:
+                self.price_note_text.set(base_note)
         else:
             self.price_note_text.set(
                 "Per-gram price appears after the first successful update."
@@ -192,7 +195,7 @@ class GoldTracker:
         """Format a market price for the summary cards."""
         if price is None:
             return "Unavailable"
-        return f"{price:,.2f} EGP/g"
+        return f"{price:,.3f} EGP/g"
 
     def on_close(self) -> None:
         """Stop background work and close the application cleanly."""
@@ -274,7 +277,7 @@ class GoldTracker:
             on_increase_grams=self.increase_grams,
             on_grams_change=self.on_grams_change,
             validate_numeric_input=self.validate_numeric_input,
-            on_refresh=self.fetch_price,
+            on_refresh=lambda: self.fetch_price(force_refresh=True),
             on_copy_value=self.copy_value,
             on_show_history=self.show_history,
             on_profit_calculator=self.show_profit_calculator,
@@ -314,19 +317,11 @@ class GoldTracker:
 
     def _build_refresh_status(self, primary_feed: str) -> tuple[str, str]:
         """Return the dashboard status text and color for the latest fetch."""
-        status_text = f"Prices updated - using {primary_feed}"
-        status_color = COLORS["success"]
-        if self.price_fetcher.last_fetch_used_stale_cache:
-            status_text = f"Using recent saved prices - {primary_feed}"
-            status_color = COLORS["warning"]
-        elif self.price_fetcher.last_fetch_warnings:
-            status_text = (
-                f"Updated with one price feed unavailable - using {primary_feed}"
-            )
-            status_color = COLORS["warning"]
+        status_text, is_warning = self.price_fetcher.build_refresh_status(primary_feed)
+        status_color = COLORS["warning"] if is_warning else COLORS["success"]
         return status_text, status_color
 
-    def fetch_price(self, silent=False):
+    def fetch_price(self, silent=False, force_refresh=False):
         """Fetch the latest price data and update the dashboard state."""
         with self._state_lock:
             if self._is_closing or self.is_fetching:
@@ -346,7 +341,9 @@ class GoldTracker:
 
         def fetch():
             try:
-                fetched_prices = self.price_fetcher.fetch()
+                fetched_prices = self.price_fetcher.fetch(
+                    force_refresh=force_refresh,
+                )
                 new_price, primary_feed = self._select_primary_price(fetched_prices)
 
                 with self._state_lock:
@@ -412,9 +409,9 @@ class GoldTracker:
             with self._state_lock:
                 price_per_gram = self.price_per_gram
             total = price_per_gram * grams
-            self.total_value.set(f"{total:,.2f}")
+            self.total_value.set(f"{total:,.3f}")
         except ValueError:
-            self.total_value.set("0.00")
+            self.total_value.set("0.000")
 
     def increase_grams(self):
         """Increase the tracked gold weight by one gram."""
@@ -457,7 +454,7 @@ class GoldTracker:
             "Loading...",
             "Loading latest price...",
             "Error",
-            "0.00",
+            "0.000",
         ):
             self.root.clipboard_clear()
             self.root.clipboard_append(value + " EGP")
@@ -481,10 +478,10 @@ class GoldTracker:
         if previous_price > 0 and price_per_gram > 0:
             diff = price_per_gram - previous_price
             if diff > 0:
-                self.trend_text.set(f"▲ Up {diff:,.2f} EGP")
+                self.trend_text.set(f"▲ Up {diff:,.3f} EGP")
                 self.trend_label.config(fg=COLORS["success"], bg=COLORS["bg_tertiary"])
             elif diff < 0:
-                self.trend_text.set(f"▼ Down {abs(diff):,.2f} EGP")
+                self.trend_text.set(f"▼ Down {abs(diff):,.3f} EGP")
                 self.trend_label.config(fg=COLORS["error"], bg=COLORS["bg_tertiary"])
             else:
                 self.trend_text.set("● No price change")
@@ -517,7 +514,9 @@ class GoldTracker:
             if self._is_closing:
                 return
 
-        self.fetch_price(silent=True)
+        # Scheduled refreshes should bypass the short-lived cache so the dashboard
+        # actually checks the live sources each minute instead of replaying old values.
+        self.fetch_price(silent=True, force_refresh=True)
         self.schedule_auto_refresh()
 
     def prefetch_history(self) -> None:

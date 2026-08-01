@@ -1,54 +1,46 @@
 """Gold price fetching for live quotes and historical trend data."""
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import json
 import logging
-import os
-import re
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
 
-import requests
 import pandas as pd
+import requests
 import yfinance as yf
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
-from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
 from urllib3.util.retry import Retry
-from webdriver_manager.chrome import ChromeDriverManager
 
 from ..config import (
     APP_NAME,
-    EGYPT_URL,
-    EGYPT_UNIT_GRAMS,
-    CHROME_DRIVER_PATH,
-    WORLDWIDE_API_URL,
-    WORLDWIDE_CURRENCY,
-    PAGE_LOAD_TIMEOUT_SECONDS,
-    MIN_VALID_PRICE,
     CACHE_DURATION_SECONDS,
+    EGYPT_GRAPHQL_URL,
+    EGYPT_UNIT_GRAMS,
+    EGYPT_URL,
     FETCH_RETRY_ATTEMPTS,
     FETCH_RETRY_BACKOFF_SECONDS,
-    KEY_WORLDWIDE,
+    HISTORY_DAYS,
     KEY_EGYPT,
+    KEY_WORLDWIDE,
     REQUEST_TIMEOUT_SECONDS,
-    SELENIUM_WAIT_TIMEOUT_SECONDS,
     STALE_CACHE_MAX_AGE_SECONDS,
     TROY_OUNCE_TO_GRAMS,
-    HISTORY_DAYS,
+    WORLDWIDE_API_URL,
+    WORLDWIDE_CURRENCY,
 )
 from ..models import HistoricalPriceSeries
 
-
 logger = logging.getLogger(__name__)
-_RESOLVED_CHROME_DRIVER_PATH: str | None = None
 
 
 class PriceFetchError(Exception):
     """Raised when a live or historical price source cannot be used."""
+
+
+class UnexpectedSourceError(PriceFetchError):
+    """Raised when a live source fails with an unexpected exception type."""
 
 
 class GoldPriceFetcher:
@@ -57,8 +49,8 @@ class GoldPriceFetcher:
     def __init__(self):
         """Initialize the price fetcher."""
         self._cached_prices: dict[str, tuple[float, float]] = {}
-        self._chrome_driver_path: str | None = None
         self._session = self._build_http_session()
+        self._egypt_query_payload = self._build_egypt_query_payload(EGYPT_URL)
         self.last_fetch_warnings: list[str] = []
         self.last_fetch_used_stale_cache = False
 
@@ -76,7 +68,7 @@ class GoldPriceFetcher:
             status=retry_count,
             backoff_factor=FETCH_RETRY_BACKOFF_SECONDS,
             status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods=frozenset({"GET"}),
+            allowed_methods=frozenset({"GET", "POST"}),
             raise_on_status=False,
         )
         adapter = HTTPAdapter(max_retries=retry_policy)
@@ -106,6 +98,20 @@ class GoldPriceFetcher:
         """Store the latest successful price for one source."""
         self._cached_prices[source_key] = (price, time.time())
 
+    def _record_warning(self, message: str) -> None:
+        """Store a user-facing warning once per fetch cycle."""
+        if message not in self.last_fetch_warnings:
+            self.last_fetch_warnings.append(message)
+
+    def _run_source_fetch(self, fetcher: Callable[[], float]) -> float:
+        """Execute one source fetch and normalize unexpected failures."""
+        try:
+            return fetcher()
+        except PriceFetchError:
+            raise
+        except Exception as exc:
+            raise UnexpectedSourceError("Unexpected live source failure") from exc
+
     def _handle_source_failure(
         self,
         source_key: str,
@@ -116,7 +122,11 @@ class GoldPriceFetcher:
         unexpected: bool = False,
     ) -> float | None:
         """Record one failed source and use stale cache for that source if available."""
-        errors.append(f"{source_name}: {exc}")
+        detail = (
+            str(exc.__cause__) if unexpected and exc.__cause__ is not None else str(exc)
+        )
+        errors.append(f"{source_name}: {detail}")
+        self._record_warning(f"{source_name} live feed unavailable")
         if unexpected:
             logger.exception(
                 "Unexpected error while fetching %s gold price",
@@ -143,9 +153,35 @@ class GoldPriceFetcher:
     ) -> float:
         """Mark a source as served from stale cache."""
         self.last_fetch_used_stale_cache = True
-        self.last_fetch_warnings.append(f"{source_name} cache fallback")
+        self._record_warning(f"{source_name} recent saved price active")
         logger.warning("Using stale cached %s gold price", source_name.lower())
         return stale_cache[source_key]
+
+    def build_refresh_status(self, primary_feed: str) -> tuple[str, bool]:
+        """Return a concise dashboard status message for the last live fetch."""
+        warning_detail = ""
+        if self.last_fetch_warnings:
+            warning_detail = f" ({'; '.join(self.last_fetch_warnings)})"
+
+        if self.last_fetch_used_stale_cache:
+            return (
+                (
+                    "Warning: using recent saved prices while live feeds recover"
+                    f"{warning_detail}"
+                ),
+                True,
+            )
+
+        if self.last_fetch_warnings:
+            return (
+                (
+                    f"Warning: update completed with limited live data; using {primary_feed}"
+                    f"{warning_detail}"
+                ),
+                True,
+            )
+
+        return (f"Prices updated - using {primary_feed}", False)
 
     def fetch(self, force_refresh: bool = False) -> dict[str, float]:
         """
@@ -184,7 +220,10 @@ class GoldPriceFetcher:
         if missing_sources:
             with ThreadPoolExecutor(max_workers=len(missing_sources)) as executor:
                 future_to_source = {
-                    executor.submit(fetcher): (source_key, source_name)
+                    executor.submit(self._run_source_fetch, fetcher): (
+                        source_key,
+                        source_name,
+                    )
                     for source_key, source_name, fetcher in missing_sources
                 }
 
@@ -194,17 +233,7 @@ class GoldPriceFetcher:
                         price = future.result()
                         prices[source_key] = price
                         self._update_cache(source_key, price)
-                    except PriceFetchError as exc:
-                        fallback_price = self._handle_source_failure(
-                            source_key,
-                            source_name,
-                            exc,
-                            stale_cache,
-                            errors,
-                        )
-                        if fallback_price is not None:
-                            prices[source_key] = fallback_price
-                    except Exception as exc:
+                    except UnexpectedSourceError as exc:
                         fallback_price = self._handle_source_failure(
                             source_key,
                             source_name,
@@ -215,17 +244,25 @@ class GoldPriceFetcher:
                         )
                         if fallback_price is not None:
                             prices[source_key] = fallback_price
+                    except PriceFetchError as exc:
+                        fallback_price = self._handle_source_failure(
+                            source_key,
+                            source_name,
+                            exc,
+                            stale_cache,
+                            errors,
+                        )
+                        if fallback_price is not None:
+                            prices[source_key] = fallback_price
 
         if not prices:
             if stale_cache is not None:
                 self.last_fetch_used_stale_cache = True
-                self.last_fetch_warnings.append("All sources served from stale cache")
                 logger.warning("All sources failed; returning stale cached prices")
                 return stale_cache
             raise PriceFetchError(f"Failed to fetch any prices: {'; '.join(errors)}")
 
         if errors:
-            self.last_fetch_warnings.append("Partial source failure")
             logger.warning("Returning degraded gold price data: %s", "; ".join(errors))
 
         logger.info(
@@ -256,41 +293,25 @@ class GoldPriceFetcher:
         return price_per_gram
 
     def _fetch_egypt_price(self) -> float:
-        """Scrape the Egypt listing price and convert it to EGP per gram."""
+        """Fetch the Egypt listing price from the Magento GraphQL endpoint."""
         last_error: Exception | None = None
 
         for attempt in range(1, FETCH_RETRY_ATTEMPTS + 1):
-            driver = None
             try:
-                chrome_options = Options()
-                chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("--disable-gpu")
-                chrome_options.add_argument("--no-sandbox")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                chrome_options.add_argument("--window-size=1920,1080")
-                chrome_options.add_argument(
-                    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                response = self._session.post(
+                    EGYPT_GRAPHQL_URL,
+                    json=self._egypt_query_payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=REQUEST_TIMEOUT_SECONDS,
                 )
-
-                service = Service(self._get_chrome_driver_path())
-                driver = webdriver.Chrome(service=service, options=chrome_options)
-                driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT_SECONDS)
-                driver.get(EGYPT_URL)
-
-                price = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT_SECONDS).until(
-                    self._wait_for_price_in_page_source
-                )
+                response.raise_for_status()
+                price = self._extract_egypt_price_from_graphql(response.json())
 
                 if price <= 0:
                     raise PriceFetchError("Egypt source returned a non-positive price")
 
                 return price / EGYPT_UNIT_GRAMS
-            except (
-                PriceFetchError,
-                RequestException,
-                TimeoutException,
-                WebDriverException,
-            ) as exc:
+            except (PriceFetchError, RequestException, ValueError) as exc:
                 last_error = exc
                 logger.warning(
                     "Egypt source attempt %s/%s failed: %s",
@@ -300,101 +321,60 @@ class GoldPriceFetcher:
                 )
                 if attempt < FETCH_RETRY_ATTEMPTS:
                     time.sleep(FETCH_RETRY_BACKOFF_SECONDS * attempt)
-            finally:
-                if driver:
-                    driver.quit()
 
         raise PriceFetchError("Egypt source unavailable after retries") from last_error
 
-    def _get_chrome_driver_path(self) -> str:
-        """Resolve and cache the ChromeDriver executable path."""
-        global _RESOLVED_CHROME_DRIVER_PATH
+    def _build_egypt_query_payload(self, product_url: str) -> dict[str, object]:
+        """Build the GraphQL payload for the configured Egypt listing."""
+        product_url_key = self._extract_product_url_key(product_url)
+        return {
+            "variables": {},
+            "query": (
+                "{"
+                f' products(filter: {{url_key: {{eq: "{product_url_key}"}}}}) {{'
+                " items {"
+                " name"
+                " sku"
+                " price_range {"
+                " maximum_price {"
+                " final_price {"
+                " value"
+                " currency"
+                " }"
+                " }"
+                " }"
+                " }"
+                " }"
+                "}"
+            ),
+        }
 
-        if self._chrome_driver_path is None:
-            configured_path = CHROME_DRIVER_PATH or os.getenv(
-                "GOLDTRACKER_CHROMEDRIVER", ""
-            )
-            if configured_path:
-                self._chrome_driver_path = configured_path
-            elif _RESOLVED_CHROME_DRIVER_PATH is not None:
-                self._chrome_driver_path = _RESOLVED_CHROME_DRIVER_PATH
-            else:
-                self._chrome_driver_path = ChromeDriverManager().install()
-                _RESOLVED_CHROME_DRIVER_PATH = self._chrome_driver_path
-        return self._chrome_driver_path
+    def _extract_product_url_key(self, product_url: str) -> str:
+        """Return the Magento product URL key from the configured product URL."""
+        path_parts = [part for part in urlparse(product_url).path.split("/") if part]
+        if not path_parts:
+            raise PriceFetchError("Egypt product URL is not configured correctly")
 
-    def _wait_for_price_in_page_source(self, driver: webdriver.Chrome) -> float | bool:
-        """Return the parsed price when it becomes available in the page source."""
-        price = self._extract_price_from_html(driver.page_source)
-        return price if price is not None else False
+        return path_parts[-1]
 
-    def _extract_price_from_html(self, html: str) -> float | None:
-        """Return the first realistic price candidate found in page HTML."""
-        matches = self._extract_structured_price_candidates(html)
-        if not matches:
-            # Fall back to visible currency text with optional thousands separators.
-            matches = re.findall(
-                r"((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?:EGP|ج\.م|جنيه)",
-                html,
-            )
+    def _extract_egypt_price_from_graphql(self, payload: dict[str, object]) -> float:
+        """Extract the configured listing price from a GraphQL response payload."""
+        if payload.get("errors"):
+            raise PriceFetchError("Egypt source returned GraphQL errors")
 
-        if not matches:
-            return None
+        try:
+            items = payload["data"]["products"]["items"]
+        except KeyError as exc:
+            raise PriceFetchError("Egypt source returned unexpected data") from exc
 
-        # Filter to get realistic prices (should be large numbers for gold)
-        for match in matches:
-            clean = match.replace(",", "")
-            try:
-                val = float(clean)
-                if val > MIN_VALID_PRICE:
-                    return val
-            except ValueError:
-                continue
+        if not items:
+            raise PriceFetchError("Egypt source returned no products")
 
-        return None
-
-    def _extract_structured_price_candidates(self, html: str) -> list[str]:
-        """Extract likely product-price values from structured page fragments."""
-        matches = self._extract_json_ld_price_candidates(html)
-        patterns = (
-            r'"price"\s*:\s*"?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"?',
-            r'data-price\s*=\s*"((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"',
-            r'itemprop\s*=\s*"price"[^>]*content\s*=\s*"((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"',
-        )
-        for pattern in patterns:
-            matches.extend(re.findall(pattern, html, flags=re.IGNORECASE))
-        return matches
-
-    def _extract_json_ld_price_candidates(self, html: str) -> list[str]:
-        """Extract product offer prices from JSON-LD script blocks."""
-        candidates: list[str] = []
-        script_blocks = re.findall(
-            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
-            html,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-
-        for script_block in script_blocks:
-            try:
-                data = json.loads(script_block.strip())
-            except json.JSONDecodeError:
-                continue
-            candidates.extend(self._walk_json_prices(data))
-
-        return candidates
-
-    def _walk_json_prices(self, value) -> list[str]:
-        """Walk decoded JSON and collect values stored under price keys."""
-        prices: list[str] = []
-        if isinstance(value, dict):
-            if "price" in value:
-                prices.append(str(value["price"]))
-            for nested_value in value.values():
-                prices.extend(self._walk_json_prices(nested_value))
-        elif isinstance(value, list):
-            for item in value:
-                prices.extend(self._walk_json_prices(item))
-        return prices
+        try:
+            final_price = items[0]["price_range"]["maximum_price"]["final_price"]
+            return float(final_price["value"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PriceFetchError("Egypt source returned an invalid price") from exc
 
 
 def fetch_gold_prices() -> dict[str, float]:
@@ -471,7 +451,14 @@ def fetch_historical_prices(days: int = HISTORY_DAYS) -> HistoricalPriceSeries:
                 FETCH_RETRY_ATTEMPTS,
                 exc,
             )
-        except Exception as exc:
+        except (
+            AttributeError,
+            KeyError,
+            RequestException,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             last_error = exc
             logger.warning(
                 "Historical fetch attempt %s/%s failed: %s",
@@ -493,13 +480,19 @@ def fetch_historical_prices(days: int = HISTORY_DAYS) -> HistoricalPriceSeries:
 # =============================================================================
 
 if __name__ == "__main__":
+    import time
+
     print("Fetching gold prices...")
     try:
+        start_time = time.perf_counter()
         prices = fetch_gold_prices()
         print("Gold price per gram (EGP):")
         if KEY_WORLDWIDE in prices:
             print(f"  Worldwide: {prices[KEY_WORLDWIDE]:,.2f}")
         if KEY_EGYPT in prices:
             print(f"  Egypt:     {prices[KEY_EGYPT]:,.2f}")
+        end_time = time.perf_counter()
+        fetched_duration = end_time - start_time
+        print(f"Fetched in {fetched_duration:.2f} seconds")
     except PriceFetchError as e:
         print(f"Error: {e}")

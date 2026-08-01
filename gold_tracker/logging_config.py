@@ -20,9 +20,7 @@ logger = logging.getLogger(__name__)
 NOISY_DEPENDENCY_LOGGERS = (
     "WDM",
     "peewee",
-    "selenium",
     "urllib3",
-    "webdriver_manager",
     "yfinance",
 )
 

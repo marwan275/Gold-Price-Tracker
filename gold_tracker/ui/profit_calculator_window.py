@@ -1,7 +1,7 @@
 """Profit calculator window for GoldTracker."""
 
-from collections.abc import Callable
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
@@ -43,14 +43,14 @@ class ProfitCalculatorWindow:
         self._row_frames: list[tk.Frame] = []
         self._metric_value_fonts: list[tuple[tk.StringVar, tkfont.Font]] = []
 
-        self.total_grams_var = tk.StringVar(value="0.00 g")
-        self.average_price_var = tk.StringVar(value="0.00 EGP/g")
+        self.total_grams_var = tk.StringVar(value="0.000 g")
+        self.average_price_var = tk.StringVar(value="0.000 EGP/g")
         self.current_price_var = tk.StringVar(value=self._format_current_price())
-        self.cost_basis_var = tk.StringVar(value="0.00 EGP")
-        self.current_value_var = tk.StringVar(value="0.00 EGP")
-        self.break_even_var = tk.StringVar(value="Break-even price: 0.00 EGP/g")
-        self.profit_var = tk.StringVar(value="0.00 EGP")
-        self.profit_percent_var = tk.StringVar(value="Profit/loss: 0.00%")
+        self.cost_basis_var = tk.StringVar(value="0.000 EGP")
+        self.current_value_var = tk.StringVar(value="0.000 EGP")
+        self.break_even_var = tk.StringVar(value="Break-even price: 0.000 EGP/g")
+        self.profit_var = tk.StringVar(value="0.000 EGP")
+        self.profit_percent_var = tk.StringVar(value="Profit/loss: 0.000%")
 
         if self._embedded:
             self.window = tk.Frame(parent, bg=COLORS["bg_primary"])
@@ -352,8 +352,8 @@ class ProfitCalculatorWindow:
         """Append one editable purchase row."""
         grams_var = tk.StringVar()
         bought_price_var = tk.StringVar()
-        row_price_per_gram_var = tk.StringVar(value="0.00 EGP/g")
-        row_profit_var = tk.StringVar(value="0.00 EGP")
+        row_price_per_gram_var = tk.StringVar(value="0.000 EGP/g")
+        row_profit_var = tk.StringVar(value="0.000 EGP")
         grams_var.trace_add("write", lambda *_args: self._recalculate())
         bought_price_var.trace_add("write", lambda *_args: self._recalculate())
 
@@ -821,13 +821,13 @@ class ProfitCalculatorWindow:
         break_even_price = self._calculate_break_even_price(total_grams, total_cost)
         profit_percentage = self._calculate_profit_percentage(profit, total_cost)
 
-        self.total_grams_var.set(f"{total_grams:,.2f} g")
-        self.average_price_var.set(f"{average_price:,.2f} EGP/g")
-        self.cost_basis_var.set(f"{total_cost:,.2f} EGP")
-        self.current_value_var.set(f"Current market value: {current_value:,.2f} EGP")
-        self.break_even_var.set(f"Break-even price: {break_even_price:,.2f} EGP/g")
-        self.profit_var.set(f"{profit:,.2f} EGP")
-        self.profit_percent_var.set(f"Profit/loss: {profit_percentage:+,.2f}%")
+        self.total_grams_var.set(f"{total_grams:,.3f} g")
+        self.average_price_var.set(f"{average_price:,.3f} EGP/g")
+        self.cost_basis_var.set(f"{total_cost:,.3f} EGP")
+        self.current_value_var.set(f"Current market value: {current_value:,.3f} EGP")
+        self.break_even_var.set(f"Break-even price: {break_even_price:,.3f} EGP/g")
+        self.profit_var.set(f"{profit:,.3f} EGP")
+        self.profit_percent_var.set(f"Profit/loss: {profit_percentage:+,.3f}%")
 
         if total_grams <= 0 or self.current_price_per_gram <= 0 or profit == 0:
             color = COLORS["text_soft"]
@@ -941,8 +941,8 @@ class ProfitCalculatorWindow:
                 grams_var.get(),
                 bought_price_var.get(),
             )
-            row_price_per_gram_var.set(f"{price_per_gram:,.2f} EGP/g")
-            row_profit_var.set(f"{profit:+,.2f} EGP")
+            row_price_per_gram_var.set(f"{price_per_gram:,.3f} EGP/g")
+            row_profit_var.set(f"{profit:+,.3f} EGP")
             row_price_per_gram_label.config(fg=COLORS["text_soft"])
 
             if self.current_price_per_gram <= 0 or profit == 0:
@@ -957,7 +957,7 @@ class ProfitCalculatorWindow:
         """Format the current market price used for profit calculations."""
         if self.current_price_per_gram <= 0:
             return "Unavailable"
-        return f"{self.current_price_per_gram:,.2f} EGP/g"
+        return f"{self.current_price_per_gram:,.3f} EGP/g"
 
     def _validate_numeric_input(self, new_value: str) -> bool:
         """Validate numeric input for table cells."""

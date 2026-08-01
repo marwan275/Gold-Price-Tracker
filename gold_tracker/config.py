@@ -33,7 +33,7 @@ COLORS = {
 
 EGYPT_URL = "https://shop.bulliontradingcenter.com/product/10g-ingot-al-masjid-annabawi"
 EGYPT_UNIT_GRAMS = 10
-CHROME_DRIVER_PATH = ""
+EGYPT_GRAPHQL_URL = "https://magento-1205032-5154147.cloudwaysapps.com/graphql"
 WORLDWIDE_API_URL = "https://GoldPrice.Today/api.php?data=live"
 WORLDWIDE_CURRENCY = "EGP"
 
@@ -57,8 +57,6 @@ STALE_CACHE_MAX_AGE_SECONDS = 300
 FETCH_RETRY_ATTEMPTS = 3
 FETCH_RETRY_BACKOFF_SECONDS = 1.5
 REQUEST_TIMEOUT_SECONDS = 10
-PAGE_LOAD_TIMEOUT_SECONDS = 30
-SELENIUM_WAIT_TIMEOUT_SECONDS = 15
 
 LOG_LEVEL = "INFO"
 LOG_FILE_NAME = "gold_tracker.log"

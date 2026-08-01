@@ -34,7 +34,6 @@ The app is built around the Egyptian BTC 10g 24K ingot listing configured in `go
 ## Requirements
 
 - Python 3.10 or newer.
-- Google Chrome, used by Selenium for the Egypt market page.
 - Tkinter. It is included with most Python installers.
 - PyInstaller and Inno Setup 6 are only needed if you want to build a shareable Windows installer.
 
@@ -91,7 +90,7 @@ Use the Dashboard to check the latest price and estimate the value of a gold amo
 - Egypt market and worldwide market prices are shown separately.
 - The last update time shows when the latest successful refresh happened.
 
-The first live price may take longer than later refreshes because Chrome and ChromeDriver may need to start for the Egypt market source.
+The first live price arrives quickly because both live sources use direct HTTP requests.
 
 ### Calculator
 
@@ -126,13 +125,13 @@ This chart is useful for market context, but it is not the same as the live Egyp
 
 Prices and history load in the background. This means the window can open and stay responsive while data is still loading.
 
-When you close the window, the app asks background workers to stop and closes the UI quickly. If a browser or network task is still busy, the app skips slow cleanup instead of leaving the window stuck on screen.
+When you close the window, the app asks background workers to stop and closes the UI quickly. If a network task is still busy, the app skips slow cleanup instead of leaving the window stuck on screen.
 
 ## Price Source Notes
 
-The Egypt market price is scraped with Selenium from the configured BTC 10g 24K ingot page. The first run may take extra time while `webdriver-manager` resolves ChromeDriver. To use a specific driver path, set `GOLDTRACKER_CHROMEDRIVER` or update `CHROME_DRIVER_PATH` in `gold_tracker/config.py`.
+The Egypt market price is loaded from the listing site's Magento GraphQL backend using the configured BTC 10g 24K ingot URL to identify the product.
 
-Live prices can fail because the third-party API is unavailable, the source page changes, ChromeDriver cannot start, or the network is down. The dashboard keeps short-lived cached prices so one failed source does not immediately blank the UI.
+Live prices can fail because the third-party API is unavailable, the GraphQL backend changes, or the network is down. The dashboard keeps short-lived cached prices so one failed source does not immediately blank the UI.
 
 Historical prices use Yahoo Finance gold futures closes and are converted from troy ounces to grams. They are displayed as USD/gram, not EGP/gram. Futures prices are not the same as the live spot price, so the history chart should be treated as market context rather than an exact local selling price.
 
@@ -151,7 +150,7 @@ Logging is configured in `gold_tracker/logging_config.py` and controlled by cons
 - Windows log files are written under `%LOCALAPPDATA%\GoldTracker\logs\gold_tracker.log`.
 - Non-Windows fallback logs are written under `~/.goldtracker/logs/gold_tracker.log`.
 - Console logs are written to stdout, so PowerShell commands such as `gold-tracker | Tee-Object -FilePath test.log` capture app logs.
-- Third-party debug noise from Selenium, urllib3, yfinance, webdriver-manager, and peewee is suppressed to `WARNING` so app logs stay readable.
+- Third-party debug noise from urllib3, yfinance, and peewee is suppressed to `WARNING` so app logs stay readable.
 
 To make app logs more verbose during development, change `LOG_LEVEL` in `gold_tracker/config.py`.
 
@@ -191,7 +190,7 @@ See `installer/README.md` for the short installer-specific checklist.
 - `gold_tracker/app.py` owns the Tk application lifecycle, shared state, screen navigation, and background refresh coordination.
 - `gold_tracker/models.py` contains shared data models used across services and UI views.
 - `gold_tracker/core/app_workers.py` prevents duplicate background jobs from running at the same time.
-- `gold_tracker/services/price_fetcher.py` fetches live prices, parses the Egypt source page, caches recent results, and loads historical data.
+- `gold_tracker/services/price_fetcher.py` fetches live prices, queries the Egypt GraphQL backend, caches recent results, and loads historical data.
 - `gold_tracker/services/excel_handler.py` imports and exports column-oriented Excel workbooks for calculator data.
 - `gold_tracker/ui/app_shell.py` builds the single-window sidebar navigation shell.
 - `gold_tracker/ui/dashboard_view.py` builds the live price dashboard and keeps the main value card layout stable.

@@ -186,27 +186,27 @@ class HistoryWindow:
         change_symbol = {"up": "▲", "down": "▼", "flat": "●"}[
             self.history_series.change_direction
         ]
-        change_value = f"{change_symbol} {self.history_series.absolute_change:+.2f}"
+        change_value = f"{change_symbol} {self.history_series.absolute_change:+.3f}"
         change_note = (
-            f"{self.history_series.percent_change:+.2f}% vs the first visible close"
+            f"{self.history_series.percent_change:+.3f}% vs the first visible close"
         )
 
         stats = [
             (
                 "Current",
-                f"${self.history_series.latest_price:,.2f}",
+                f"${self.history_series.latest_price:,.3f}",
                 "Latest close",
                 COLORS["gold"],
             ),
             (
                 "Range Low",
-                f"${self.history_series.lowest_price:,.2f}",
+                f"${self.history_series.lowest_price:,.3f}",
                 "Lowest close in view",
                 COLORS["warning"],
             ),
             (
                 "Range High",
-                f"${self.history_series.highest_price:,.2f}",
+                f"${self.history_series.highest_price:,.3f}",
                 "Highest close in view",
                 COLORS["success"],
             ),
@@ -261,7 +261,7 @@ class HistoryWindow:
             bg=COLORS["bg_secondary"],
         ).pack(anchor="w", pady=(4, 0))
 
-        self._build_badge(right, f"Avg ${self.history_series.average_price:,.2f}").pack(
+        self._build_badge(right, f"Avg ${self.history_series.average_price:,.3f}").pack(
             anchor="e"
         )
 
@@ -399,7 +399,7 @@ class HistoryWindow:
             zorder=4,
         )
         axis.annotate(
-            f"${series.latest_price:,.2f}",
+            f"${series.latest_price:,.3f}",
             xy=(series.end_date, series.latest_price),
             xytext=(-18, -20 if series.change_direction != "down" else 18),
             textcoords="offset points",
