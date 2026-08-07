@@ -12,6 +12,26 @@ from pathlib import Path
 import tomllib
 
 
+def find_iscc():
+    """Find the Inno Setup compiler."""
+
+    iscc = shutil.which("ISCC.exe")
+    if iscc:
+        return Path(iscc)
+
+    # Common Windows installation locations
+    possible_paths = [
+        Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
+        Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
+    ]
+
+    for path in possible_paths:
+        if path.exists():
+            return path
+
+    return None
+
+
 def build():
     """Build the application and installer."""
     project_root = Path(__file__).parent
@@ -56,9 +76,13 @@ def build():
 
     # Step 3: Compile installer with Inno Setup
     print("Compiling installer with Inno Setup...")
-    iscc_path = r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    iscc = find_iscc()
+    if not iscc:
+        print("\n   ✗ Inno Setup compiler not found")
+        return False
+    print(f"   Using Inno Setup: {iscc}")
     result = subprocess.run(
-        [iscc_path, str(iss_path)],
+        [str(iscc), str(iss_path)],
         cwd=project_root,
         check=False,
     )
@@ -77,15 +101,21 @@ def build():
     )
     installer_path = project_root / f"dist/24K-GoldTrackerSetup-{version}.exe"
 
-    if exe_path.exists():
-        size_mb = exe_path.stat().st_size / (1024 * 1024)
-        print(f"Executable: {exe_path}")
-        print(f"     Size: {size_mb:.1f} MB")
+    if not exe_path.exists():
+        print(f"\n   ✗ Executable was not created: {exe_path}")
+        return False
 
-    if installer_path.exists():
-        size_mb = installer_path.stat().st_size / (1024 * 1024)
-        print(f"Installer: {installer_path}")
-        print(f"     Size: {size_mb:.1f} MB")
+    size_mb = exe_path.stat().st_size / (1024 * 1024)
+    print(f"Executable: {exe_path}")
+    print(f"     Size: {size_mb:.1f} MB")
+
+    if not installer_path.exists():
+        print(f"\n   ✗ Installer was not created: {installer_path}")
+        return False
+
+    size_mb = installer_path.stat().st_size / (1024 * 1024)
+    print(f"Installer: {installer_path}")
+    print(f"     Size: {size_mb:.1f} MB")
 
     return True
 

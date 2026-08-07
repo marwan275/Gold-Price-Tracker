@@ -1,0 +1,125 @@
+name: Build and Release Windows App
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name, e.g. v1.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag format and version consistency
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag }}"
+          
+          # Validate tag format
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag: $TAG. Expected format: v1.2.0"
+            exit 1
+          fi
+          
+          # Extract version from tag
+          TAG_VERSION="${TAG#v}"
+          
+          # Extract version from pyproject.toml using Python
+          PYPROJECT_VERSION=$(python3 -c "import tomllib; data = tomllib.loads(open('pyproject.toml').read()); print(data['project']['version'])")
+          
+          if [[ -z "$PYPROJECT_VERSION" ]]; then
+            echo "Could not read version from pyproject.toml"
+            exit 1
+          fi
+          
+          if [[ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]]; then
+            echo "Tag version ($TAG_VERSION) does not match pyproject.toml ($PYPROJECT_VERSION)"
+            exit 1
+          fi
+          
+          echo "Tag $TAG is valid and matches version"
+
+      - name: Check tag does not already exist
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag }}"
+          
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on remote"
+            exit 1
+          fi
+          
+          echo "Tag $TAG is unique"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Inno Setup
+        uses: jrfnl/inno-setup@v1
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install pyinstaller pillow
+          pip install -e .
+
+      - name: Run unified build script
+        shell: bash
+        run: python build.py
+
+      - name: Find installer artifact
+        id: installer
+        shell: bash
+        run: |
+          VERSION=$(python3 -c "import tomllib; print(tomllib.loads(open('pyproject.toml').read())['project']['version'])")
+          INSTALLER="dist/24K-GoldTrackerSetup-${VERSION}.exe"
+          
+          if [[ ! -f "$INSTALLER" ]]; then
+            echo "Installer not found: $INSTALLER"
+            ls -la dist/ 2>/dev/null || echo "dist directory missing"
+            exit 1
+          fi
+          
+          SIZE=$(du -h "$INSTALLER" | cut -f1)
+          echo "Installer found: $INSTALLER ($SIZE)"
+          
+          echo "path=$INSTALLER" >> $GITHUB_OUTPUT
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ inputs.tag }}" --title "24K-GoldTracker ${{ inputs.tag }}" --generate-notes
+
+      - name: Upload installer to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.tag }}" "${{ steps.installer.outputs.path }}" --clobber
