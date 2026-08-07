@@ -70,7 +70,28 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install Inno Setup
-        uses: jrfnl/inno-setup@v1
+        shell: powershell
+        run: |
+          Write-Host "Installing Inno Setup via winget..."
+          winget install -e --id JRSoftware.InnoSetup --accept-source-agreements --accept-package-agreements --silent
+          
+          Write-Host "Waiting for installation to complete..."
+          Start-Sleep -Seconds 3
+          
+          # Verify installation
+          $IsccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $IsccPath) {
+            Write-Host "✅ Inno Setup installed successfully"
+          } else {
+            Write-Host "❌ Inno Setup not found at expected location"
+            # Try to find it
+            $found = Get-ChildItem "C:\Program Files (x86)" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue
+            if ($found) {
+              Write-Host "Found at: $($found.FullName)"
+            } else {
+              exit 1
+            }
+          }
 
       - name: Install build dependencies
         shell: bash

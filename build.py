@@ -42,7 +42,7 @@ def build():
         dir_path = project_root / directory
         if dir_path.exists():
             shutil.rmtree(dir_path)
-            print(f"   ✓ Removed {directory}/")
+            print(f"   [OK] Removed {directory}/")
     print()
 
     # Read version from pyproject.toml
@@ -60,7 +60,7 @@ def build():
 
     iss_path = project_root / "installer" / "24K-GoldTracker.iss"
     iss_path.write_text(iss_content, encoding="utf-8")
-    print(f"   ✓ Generated {iss_path.name}\n")
+    print(f"   [OK] Generated {iss_path.name}\n")
 
     # Step 2: Build with PyInstaller
     print("Building executable with PyInstaller...")
@@ -70,15 +70,15 @@ def build():
         check=False,
     )
     if result.returncode != 0:
-        print("\n   ✗ PyInstaller failed")
+        print("\n   [FAIL] PyInstaller failed")
         return False
-    print("   ✓ PyInstaller build complete\n")
+    print("   [OK] PyInstaller build complete\n")
 
     # Step 3: Compile installer with Inno Setup
     print("Compiling installer with Inno Setup...")
     iscc = find_iscc()
     if not iscc:
-        print("\n   ✗ Inno Setup compiler not found")
+        print("\n   [FAIL] Inno Setup compiler not found")
         return False
     print(f"   Using Inno Setup: {iscc}")
     result = subprocess.run(
@@ -87,9 +87,9 @@ def build():
         check=False,
     )
     if result.returncode != 0:
-        print("\n   ✗ Inno Setup failed")
+        print("\n   [FAIL] Inno Setup failed")
         return False
-    print("   ✓ Inno Setup compilation complete\n")
+    print("   [OK] Inno Setup compilation complete\n")
 
     # Summary
     print("=" * 50)
@@ -102,7 +102,7 @@ def build():
     installer_path = project_root / f"dist/24K-GoldTrackerSetup-{version}.exe"
 
     if not exe_path.exists():
-        print(f"\n   ✗ Executable was not created: {exe_path}")
+        print(f"\n   [FAIL] Executable was not created: {exe_path}")
         return False
 
     size_mb = exe_path.stat().st_size / (1024 * 1024)
@@ -110,7 +110,7 @@ def build():
     print(f"     Size: {size_mb:.1f} MB")
 
     if not installer_path.exists():
-        print(f"\n   ✗ Installer was not created: {installer_path}")
+        print(f"\n   [FAIL] Installer was not created: {installer_path}")
         return False
 
     size_mb = installer_path.stat().st_size / (1024 * 1024)
