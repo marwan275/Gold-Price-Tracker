@@ -12,6 +12,26 @@ from pathlib import Path
 import tomllib
 
 
+def find_iscc():
+    """Find the Inno Setup compiler."""
+
+    iscc = shutil.which("ISCC.exe")
+    if iscc:
+        return Path(iscc)
+
+    # Common Windows installation locations
+    possible_paths = [
+        Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
+        Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
+    ]
+
+    for path in possible_paths:
+        if path.exists():
+            return path
+
+    return None
+
+
 def build():
     """Build the application and installer."""
     project_root = Path(__file__).parent
@@ -22,7 +42,7 @@ def build():
         dir_path = project_root / directory
         if dir_path.exists():
             shutil.rmtree(dir_path)
-            print(f"   ✓ Removed {directory}/")
+            print(f"   [OK] Removed {directory}/")
     print()
 
     # Read version from pyproject.toml
@@ -40,7 +60,7 @@ def build():
 
     iss_path = project_root / "installer" / "24K-GoldTracker.iss"
     iss_path.write_text(iss_content, encoding="utf-8")
-    print(f"   ✓ Generated {iss_path.name}\n")
+    print(f"   [OK] Generated {iss_path.name}\n")
 
     # Step 2: Build with PyInstaller
     print("Building executable with PyInstaller...")
@@ -50,22 +70,26 @@ def build():
         check=False,
     )
     if result.returncode != 0:
-        print("\n   ✗ PyInstaller failed")
+        print("\n   [FAIL] PyInstaller failed")
         return False
-    print("   ✓ PyInstaller build complete\n")
+    print("   [OK] PyInstaller build complete\n")
 
     # Step 3: Compile installer with Inno Setup
     print("Compiling installer with Inno Setup...")
-    iscc_path = r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    iscc = find_iscc()
+    if not iscc:
+        print("\n   [FAIL] Inno Setup compiler not found")
+        return False
+    print(f"   Using Inno Setup: {iscc}")
     result = subprocess.run(
-        [iscc_path, str(iss_path)],
+        [str(iscc), str(iss_path)],
         cwd=project_root,
         check=False,
     )
     if result.returncode != 0:
-        print("\n   ✗ Inno Setup failed")
+        print("\n   [FAIL] Inno Setup failed")
         return False
-    print("   ✓ Inno Setup compilation complete\n")
+    print("   [OK] Inno Setup compilation complete\n")
 
     # Summary
     print("=" * 50)
@@ -77,15 +101,21 @@ def build():
     )
     installer_path = project_root / f"dist/24K-GoldTrackerSetup-{version}.exe"
 
-    if exe_path.exists():
-        size_mb = exe_path.stat().st_size / (1024 * 1024)
-        print(f"Executable: {exe_path}")
-        print(f"     Size: {size_mb:.1f} MB")
+    if not exe_path.exists():
+        print(f"\n   [FAIL] Executable was not created: {exe_path}")
+        return False
 
-    if installer_path.exists():
-        size_mb = installer_path.stat().st_size / (1024 * 1024)
-        print(f"Installer: {installer_path}")
-        print(f"     Size: {size_mb:.1f} MB")
+    size_mb = exe_path.stat().st_size / (1024 * 1024)
+    print(f"Executable: {exe_path}")
+    print(f"     Size: {size_mb:.1f} MB")
+
+    if not installer_path.exists():
+        print(f"\n   [FAIL] Installer was not created: {installer_path}")
+        return False
+
+    size_mb = installer_path.stat().st_size / (1024 * 1024)
+    print(f"Installer: {installer_path}")
+    print(f"     Size: {size_mb:.1f} MB")
 
     return True
 
