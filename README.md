@@ -168,7 +168,7 @@ pyinstaller 24K-GoldTracker.spec
 The executable should be created at:
 
 ```text
-dist\24K-GoldTracker-1.1.0\24K-GoldTracker-1.1.0.exe
+dist\24K-GoldTracker-1.1.1\24K-GoldTracker-1.1.1.exe
 ```
 
 Then build the installer with Inno Setup 6:
@@ -180,7 +180,7 @@ iscc installer\24K-GoldTracker.iss
 The installer output is:
 
 ```text
-dist\24K-GoldTrackerSetup-1.1.0.exe
+dist\24K-GoldTrackerSetup-1.1.1.exe
 ```
 
 See `installer/README.md` for the short installer-specific checklist.

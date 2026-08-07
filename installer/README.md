@@ -19,7 +19,7 @@ pyinstaller 24K-GoldTracker.spec
 Confirm this file exists before compiling the installer:
 
 ```text
-dist\24K-GoldTracker-1.1.0\24K-GoldTracker-1.1.0.exe
+dist\24K-GoldTracker-1.1.1\24K-GoldTracker-1.1.1.exe
 ```
 
 ## Build The Installer
@@ -35,7 +35,7 @@ iscc installer\24K-GoldTracker.iss
 The installer output will be created as:
 
 ```text
-dist\24K-GoldTrackerSetup-1.1.0.exe
+dist\24K-GoldTrackerSetup-1.1.1.exe
 ```
 
 ## Notes
